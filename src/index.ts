@@ -7,6 +7,7 @@ import { audit, formatReport } from "./scanner.js";
 import { allRules, Severity } from "./rules.js";
 import { aiScan, formatAIReport } from "./ai-scanner.js";
 import { getDB } from "./db.js";
+import { GateConfig } from "./gate.js";
 
 const server = new McpServer({
   name: "sentinel-kb",
@@ -136,17 +137,30 @@ server.tool(
       .optional()
       .describe("Claude model to use (default: sonnet)"),
     maxBatches: z.number().optional().describe("Max file batches to analyze (default: 20)"),
+    freeLimit: z
+      .number()
+      .optional()
+      .describe("Max findings to show in full detail (freemium gate). Omit to show all."),
+    upgradeUrl: z
+      .string()
+      .optional()
+      .describe("Upgrade URL to include in gate message"),
   },
-  async ({ projectPath, model, maxBatches }) => {
+  async ({ projectPath, model, maxBatches, freeLimit, upgradeUrl }) => {
     try {
       const modelMap: Record<string, string> = {
         sonnet: "claude-sonnet-4-20250514",
         opus: "claude-opus-4-20250514",
         haiku: "claude-haiku-4-5-20251001",
       };
+
+      const gateConfig: GateConfig | undefined =
+        freeLimit !== undefined ? { freeLimit, upgradeUrl } : undefined;
+
       const report = await aiScan(projectPath, {
         model: model ? modelMap[model] : undefined,
         maxBatches: maxBatches || undefined,
+        gateConfig,
       });
       const text = formatAIReport(report);
       return {

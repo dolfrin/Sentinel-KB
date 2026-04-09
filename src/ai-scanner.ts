@@ -7,6 +7,7 @@ import * as path from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { ExtractedFinding } from "./extractor.js";
 import { getDB } from "./db.js";
+import { gateFindings, GateConfig, GatedResult } from "./gate.js";
 
 export interface AIScanFinding {
   severity: "critical" | "high" | "medium" | "low" | "info";
@@ -28,6 +29,7 @@ export interface AIScanReport {
   summary: { critical: number; high: number; medium: number; low: number; info: number };
   knowledgeBaseSize: number;
   model: string;
+  gate?: GatedResult<AIScanFinding>;
 }
 
 /** Detect project type and languages from file extensions */
@@ -207,6 +209,7 @@ export async function aiScan(
     model?: string;
     maxBatches?: number;
     apiKey?: string;
+    gateConfig?: GateConfig;
   }
 ): Promise<AIScanReport> {
   const model = options?.model || "claude-sonnet-4-20250514";
@@ -273,7 +276,14 @@ export async function aiScan(
     }
   }
 
-  // Build summary
+  // Apply freemium gate if configured
+  const gateResult = options?.gateConfig
+    ? gateFindings(allFindings, options.gateConfig)
+    : null;
+
+  const visibleFindings = gateResult ? gateResult.visible : allFindings;
+
+  // Build summary (from all findings, not just visible, so counts reflect reality)
   const summary = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   for (const f of allFindings) {
     summary[f.severity]++;
@@ -283,16 +293,19 @@ export async function aiScan(
     timestamp: new Date().toISOString(),
     projectPath: projectDir,
     filesScanned: files.length,
-    findings: allFindings,
+    findings: visibleFindings,
     summary,
     knowledgeBaseSize: stats.total_findings,
     model,
+    gate: gateResult ?? undefined,
   };
 }
 
 /** Format AI scan report as text */
 export function formatAIReport(report: AIScanReport): string {
   const lines: string[] = [];
+  const gate = report.gate;
+  const totalCount = gate ? gate.totalCount : report.findings.length;
 
   lines.push("═══════════════════════════════════════════════════════════════");
   lines.push("  AI SECURITY AUDIT REPORT");
@@ -307,10 +320,10 @@ export function formatAIReport(report: AIScanReport): string {
   lines.push(`  CRITICAL: ${report.summary.critical}  HIGH: ${report.summary.high}  MEDIUM: ${report.summary.medium}  LOW: ${report.summary.low}  INFO: ${report.summary.info}`);
   lines.push("───────────────────────────────────────────────────────────────");
 
-  if (report.findings.length === 0) {
+  if (report.findings.length === 0 && (!gate || gate.gated.length === 0)) {
     lines.push("\n  No significant security issues found.\n");
   } else {
-    // Group by category
+    // Group visible findings by category
     const byCat: Record<string, AIScanFinding[]> = {};
     for (const f of report.findings) {
       if (!byCat[f.category]) byCat[f.category] = [];
@@ -331,10 +344,25 @@ export function formatAIReport(report: AIScanReport): string {
         lines.push(`  Fix: ${f.recommendation}`);
       }
     }
+
+    // Show gated findings as severity-only summaries
+    if (gate && gate.isGated && gate.gated.length > 0) {
+      lines.push("\n───────────────────────────────────────────────────────────────");
+      lines.push(`  ${gate.gated.length} additional findings — upgrade to view details`);
+      lines.push("───────────────────────────────────────────────────────────────");
+
+      for (const g of gate.gated) {
+        const sev = g.severity.toUpperCase().padEnd(8);
+        lines.push(`  [${sev}] ${g.title}  (${g.category})`);
+      }
+
+      lines.push("");
+      lines.push(`  *** ${gate.gateMessage} ***`);
+    }
   }
 
   lines.push("\n═══════════════════════════════════════════════════════════════");
-  lines.push(`  Total: ${report.findings.length} findings`);
+  lines.push(`  Total: ${totalCount} findings${gate && gate.isGated ? ` (${report.findings.length} shown, ${gate.gated.length} gated)` : ""}`);
   lines.push("═══════════════════════════════════════════════════════════════\n");
 
   return lines.join("\n");
