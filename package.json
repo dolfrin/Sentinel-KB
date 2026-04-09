@@ -1,11 +1,11 @@
 {
-  "name": "mcp-messenger-audit",
+  "name": "sentinel-kb",
   "version": "0.1.0",
-  "description": "Security audit MCP server for messenger applications — E2E encryption, WebRTC/P2P, Android, Rust backend",
+  "description": "AI-powered security vulnerability scanner backed by real audit findings from 58+ professional firms",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "messenger-audit": "dist/index.js"
+    "sentinel-kb": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -18,12 +18,13 @@
     "test:watch": "vitest"
   },
   "keywords": [
-    "mcp",
     "security",
     "audit",
-    "messenger",
-    "e2e",
-    "webrtc"
+    "vulnerability",
+    "scanner",
+    "owasp",
+    "mcp",
+    "ai"
   ],
   "author": "QuantumWing",
   "license": "MIT",
