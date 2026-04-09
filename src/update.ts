@@ -99,18 +99,20 @@ async function main() {
     console.log("\n\u2500\u2500 Migrating existing data to SQLite \u2500\u2500\n");
 
     // Import from knowledge-base.json
-    if (fs.existsSync(FINDINGS_PATH)) {
+    // importFromJson handles missing files gracefully
+    const jsonResult = db.importFromJson(FINDINGS_PATH, "regex");
+    if (jsonResult.findings > 0) {
       console.log(`  Importing ${FINDINGS_PATH}...`);
-      const result = db.importFromJson(FINDINGS_PATH, "regex");
-      console.log(`  \u2713 JSON: ${result.reports} reports, ${result.findings} findings`);
+      console.log(`  \u2713 JSON: ${jsonResult.reports} reports, ${jsonResult.findings} findings`);
     }
 
     // Import from per-model cache
     const cacheDir = path.join(BASE_DIR, "extracted");
-    if (fs.existsSync(cacheDir)) {
+    // importFromCache handles missing dir gracefully
+    const cacheResult = db.importFromCache(cacheDir);
+    if (cacheResult.findings > 0) {
       console.log(`  Importing cache from ${cacheDir}...`);
-      const result = db.importFromCache(cacheDir);
-      console.log(`  \u2713 Cache: ${result.models.join(", ")} \u2014 ${result.reports} reports, ${result.findings} findings`);
+      console.log(`  \u2713 Cache: ${cacheResult.models.join(", ")} \u2014 ${cacheResult.reports} reports, ${cacheResult.findings} findings`);
     }
 
     const stats = db.getStats();
@@ -215,8 +217,14 @@ async function main() {
 
   // Include cached PDFs from previous runs
   const knownPaths = new Set(validReports.map((r) => r.path));
-  if (fs.existsSync(REPORTS_DIR)) {
-    const cached = fs.readdirSync(REPORTS_DIR).filter((f) => f.endsWith(".pdf"));
+  let cachedFiles: string[];
+  try {
+    cachedFiles = fs.readdirSync(REPORTS_DIR).filter((f) => f.endsWith(".pdf"));
+  } catch {
+    cachedFiles = [];
+  }
+  {
+    const cached = cachedFiles;
     for (const filename of cached) {
       const fullPath = path.join(REPORTS_DIR, filename);
       if (knownPaths.has(fullPath)) continue;

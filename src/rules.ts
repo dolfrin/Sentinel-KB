@@ -1,3 +1,4 @@
+// sentinel-kb-ignore-file
 // Security audit rules for messenger applications
 
 export type Severity = "critical" | "high" | "medium" | "low" | "info";

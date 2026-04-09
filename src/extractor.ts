@@ -223,12 +223,15 @@ export async function extractAll(
 /** Save extracted findings to JSON */
 export function saveFindings(findings: ExtractedFinding[], outputPath: string) {
   const dir = path.dirname(outputPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(findings, null, 2));
 }
 
 /** Load previously extracted findings */
 export function loadFindings(filePath: string): ExtractedFinding[] {
-  if (!fs.existsSync(filePath)) return [];
-  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+  } catch {
+    return [];
+  }
 }

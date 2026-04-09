@@ -170,7 +170,7 @@ export class SecurityAuditDB {
 
   constructor(dbPath: string = DEFAULT_DB_PATH) {
     const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true });
 
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
@@ -527,10 +527,14 @@ export class SecurityAuditDB {
     let pdf_hash: string | null = null;
     let pdf_size: number | null = null;
 
-    if (opts?.pdfPath && fs.existsSync(opts.pdfPath)) {
-      const buf = fs.readFileSync(opts.pdfPath);
-      pdf_hash = crypto.createHash("sha256").update(buf).digest("hex");
-      pdf_size = buf.length;
+    if (opts?.pdfPath) {
+      try {
+        const buf = fs.readFileSync(opts.pdfPath);
+        pdf_hash = crypto.createHash("sha256").update(buf).digest("hex");
+        pdf_size = buf.length;
+      } catch {
+        // File not available — skip hash computation
+      }
     }
 
     this.stmts.updateDownloadStatus.run({
@@ -791,9 +795,12 @@ export class SecurityAuditDB {
   // ─── Migration from JSON ──────────────────────────────────
 
   importFromJson(jsonPath: string, modelSlug: string = "regex"): { reports: number; findings: number } {
-    if (!fs.existsSync(jsonPath)) return { reports: 0, findings: 0 };
-
-    const raw: ExtractedFinding[] = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+    let raw: ExtractedFinding[];
+    try {
+      raw = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+    } catch {
+      return { reports: 0, findings: 0 };
+    }
     if (!Array.isArray(raw) || raw.length === 0) return { reports: 0, findings: 0 };
 
     // Group by sourceId
@@ -847,13 +854,18 @@ export class SecurityAuditDB {
 
   /** Import from per-model cache directories (extracted/sonnet/*.json, etc.) */
   importFromCache(cacheDir: string): { models: string[]; reports: number; findings: number } {
-    if (!fs.existsSync(cacheDir)) return { models: [], reports: 0, findings: 0 };
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(cacheDir, { withFileTypes: true });
+    } catch {
+      return { models: [], reports: 0, findings: 0 };
+    }
 
     const models: string[] = [];
     let totalReports = 0;
     let totalFindings = 0;
 
-    const entries = fs.readdirSync(cacheDir, { withFileTypes: true });
+
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const slug = entry.name;
@@ -912,7 +924,7 @@ export class SecurityAuditDB {
     const rows = this.getAllFindings();
     const findings = rows.map((r) => this.toExtractedFinding(r));
     const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(outputPath, JSON.stringify(findings, null, 2));
     return findings.length;
   }

@@ -182,6 +182,11 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
       })
     );
 
+    // Allow files to opt out of scanning with a sentinel comment
+    if (content.startsWith("// sentinel-kb-ignore-file") || content.includes("\n// sentinel-kb-ignore-file")) {
+      continue;
+    }
+
     if (applicableRules.length > 0) {
       const findings = scanFile(file, content, applicableRules, projectDir);
       allFindings.push(...findings);
@@ -189,8 +194,17 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
   }
 
   // Check required patterns (absence-based findings)
+  // Only report absence if the project actually contains files matching the rule's domain
   for (const rule of rules) {
     if (rule.requiredPatterns) {
+      // Check if the project has any files that match the rule's filePatterns
+      // If no domain files exist, the rule is irrelevant to this project
+      const domainFiles = collectFiles(projectDir, rule.filePatterns);
+      if (domainFiles.length === 0) {
+        // No domain-relevant files — skip absence checks for this rule entirely
+        continue;
+      }
+
       for (const rp of rule.requiredPatterns) {
         const patternFiles = collectFiles(projectDir, [rp.filePattern]);
         let found = false;
@@ -207,7 +221,7 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
         }
         // Also search all files matching rule.filePatterns
         if (!found) {
-          const ruleFiles = collectFiles(projectDir, rule.filePatterns);
+          const ruleFiles = domainFiles;
           for (const file of ruleFiles) {
             try {
               const content = fs.readFileSync(file, "utf-8");

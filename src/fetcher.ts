@@ -18,7 +18,7 @@ function download(url: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
     ensureDir(path.dirname(dest));
 
-    const request = (currentUrl: string, redirectCount: number) => {
+    const followRedirects = (currentUrl: string, redirectCount: number) => {
       if (redirectCount > 10) {
         reject(new Error("Too many redirects"));
         return;
@@ -33,7 +33,7 @@ function download(url: string, dest: string): Promise<void> {
           const location = response.headers.location;
           const fullUrl = location.startsWith("http") ? location : new URL(location, currentUrl).href;
           try {
-            request(fullUrl, redirectCount + 1);
+            followRedirects(fullUrl, redirectCount + 1);
           } catch (err) {
             reject(err);
           }
@@ -61,7 +61,7 @@ function download(url: string, dest: string): Promise<void> {
           // Validate non-empty
           const stats = fs.statSync(dest);
           if (stats.size === 0) {
-            fs.unlinkSync(dest);
+            fs.rmSync(dest, { force: true });
             reject(new Error("Downloaded file is empty"));
           } else {
             resolve();
@@ -73,7 +73,7 @@ function download(url: string, dest: string): Promise<void> {
       });
     };
 
-    request(url, 0);
+    followRedirects(url, 0);
   });
 }
 
@@ -86,10 +86,14 @@ export function getReportPath(source: AuditSource): string {
 /** Check if a report is already downloaded (and not empty/corrupt) */
 export function isDownloaded(source: AuditSource): boolean {
   const p = getReportPath(source);
-  if (!fs.existsSync(p)) return false;
-  const stats = fs.statSync(p);
+  let stats: fs.Stats;
+  try {
+    stats = fs.statSync(p);
+  } catch {
+    return false;
+  }
   if (stats.size === 0) {
-    fs.unlinkSync(p); // remove empty files
+    fs.rmSync(p, { force: true }); // remove empty files
     return false;
   }
   // Check if it's actually a PDF (not HTML error page)
