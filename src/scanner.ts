@@ -263,7 +263,7 @@ export function formatReport(report: AuditReport): string {
   const lines: string[] = [];
 
   lines.push("═══════════════════════════════════════════════════════");
-  lines.push("  MESSENGER SECURITY AUDIT REPORT");
+  lines.push("  Sentinel-KB Security Audit Report");
   lines.push("═══════════════════════════════════════════════════════");
   lines.push(`  Project: ${report.projectPath}`);
   lines.push(`  Date:    ${report.timestamp}`);
