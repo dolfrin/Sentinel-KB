@@ -9,6 +9,14 @@ import {
   messengerRules,
   androidRules,
   backendRules,
+  injectionRules,
+  xssRules,
+  authRules,
+  secretsRules,
+  ssrfCsrfRules,
+  memorySafetyRules,
+  concurrencyRules,
+  dependencyRules,
   type Rule,
   type Severity,
 } from "../rules.js";
@@ -25,7 +33,7 @@ describe("allRules", () => {
 
   it("contains all category sub-arrays", () => {
     const allIds = new Set(allRules.map((r) => r.id));
-    for (const rule of [...e2eRules, ...webrtcRules, ...messengerRules, ...androidRules, ...backendRules]) {
+    for (const rule of [...e2eRules, ...webrtcRules, ...messengerRules, ...androidRules, ...backendRules, ...injectionRules, ...xssRules, ...authRules, ...secretsRules, ...ssrfCsrfRules, ...memorySafetyRules, ...concurrencyRules, ...dependencyRules]) {
       expect(allIds.has(rule.id)).toBe(true);
     }
   });
@@ -36,7 +44,15 @@ describe("allRules", () => {
       webrtcRules.length +
       messengerRules.length +
       androidRules.length +
-      backendRules.length;
+      backendRules.length +
+      injectionRules.length +
+      xssRules.length +
+      authRules.length +
+      secretsRules.length +
+      ssrfCsrfRules.length +
+      memorySafetyRules.length +
+      concurrencyRules.length +
+      dependencyRules.length;
     expect(allRules.length).toBe(total);
   });
 });
