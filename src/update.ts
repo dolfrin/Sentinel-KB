@@ -16,7 +16,7 @@ const REPORTS_DIR = path.join(BASE_DIR, "reports");
 const FINDINGS_PATH = path.join(BASE_DIR, "knowledge-base.json");
 
 function ensureDir(dir: string) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true });
 }
 
 /** Download a PDF, validating it's actually a PDF */
@@ -31,7 +31,11 @@ function downloadPdf(url: string, dest: string): Promise<void> {
         if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume();
           const loc = res.headers.location;
-          doRequest(loc.startsWith("http") ? loc : new URL(loc, currentUrl).href, depth + 1);
+          try {
+            doRequest(loc.startsWith("http") ? loc : new URL(loc, currentUrl).href, depth + 1);
+          } catch (err) {
+            reject(err);
+          }
           return;
         }
         if (res.statusCode !== 200) {
@@ -59,7 +63,7 @@ function downloadPdf(url: string, dest: string): Promise<void> {
           }
         });
       }).on("error", (err) => {
-        if (fs.existsSync(dest)) fs.unlinkSync(dest);
+        fs.rmSync(dest, { force: true });
         reject(err);
       });
     };
@@ -180,7 +184,7 @@ async function main() {
           db.updateDownloadStatus(report.id, "downloaded", { pdfPath: dest });
           return;
         }
-        if (fs.existsSync(dest)) fs.unlinkSync(dest);
+        fs.rmSync(dest, { force: true });
         try {
           await downloadPdf(report.url, dest);
           downloaded++;

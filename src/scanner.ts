@@ -55,7 +55,7 @@ function collectFiles(dir: string, patterns: string[]): string[] {
       // Skip common non-source directories
       if (entry.isDirectory()) {
         if (
-          ["node_modules", ".git", "build", "target", ".gradle", ".idea", ".cxx", "dist"].includes(
+          ["node_modules", ".git", "build", "target", ".gradle", ".idea", ".cxx", "dist", "__tests__", "test", "tests"].includes(
             entry.name
           )
         ) {

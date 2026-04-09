@@ -10,9 +10,7 @@ const REPORTS_DIR = path.join(process.env.HOME || "~", ".messenger-audit", "repo
 
 /** Ensure reports directory exists */
 function ensureDir(dir: string) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  fs.mkdirSync(dir, { recursive: true });
 }
 
 /** Download a URL to a file, following redirects */
@@ -34,7 +32,11 @@ function download(url: string, dest: string): Promise<void> {
           response.resume(); // drain
           const location = response.headers.location;
           const fullUrl = location.startsWith("http") ? location : new URL(location, currentUrl).href;
-          request(fullUrl, redirectCount + 1);
+          try {
+            request(fullUrl, redirectCount + 1);
+          } catch (err) {
+            reject(err);
+          }
           return;
         }
 
@@ -66,7 +68,7 @@ function download(url: string, dest: string): Promise<void> {
           }
         });
       }).on("error", (err) => {
-        if (fs.existsSync(dest)) fs.unlinkSync(dest);
+        fs.rmSync(dest, { force: true });
         reject(err);
       });
     };
