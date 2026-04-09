@@ -308,8 +308,8 @@ export function formatAIReport(report: AIScanReport): string {
   const totalCount = gate ? gate.totalCount : report.findings.length;
 
   lines.push("═══════════════════════════════════════════════════════════════");
-  lines.push("  AI SECURITY AUDIT REPORT");
-  lines.push("  Powered by knowledge base of real audit findings");
+  lines.push("  Sentinel-KB AI Security Audit");
+  lines.push("  Powered by Claude + 2000+ real audit findings");
   lines.push("═══════════════════════════════════════════════════════════════");
   lines.push(`  Project:        ${report.projectPath}`);
   lines.push(`  Date:           ${report.timestamp}`);
