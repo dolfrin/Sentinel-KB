@@ -11,18 +11,35 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "audit": "tsx src/cli.ts"
+    "scan": "tsx src/cli.ts scan",
+    "ai": "tsx src/cli.ts ai",
+    "update": "tsx src/update.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "keywords": ["mcp", "security", "audit", "messenger", "e2e", "webrtc"],
+  "keywords": [
+    "mcp",
+    "security",
+    "audit",
+    "messenger",
+    "e2e",
+    "webrtc"
+  ],
   "author": "QuantumWing",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.85.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^12.8.0",
+    "pdf-parse": "^2.4.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.5.2",
+    "@types/pdf-parse": "^1.1.5",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   }
 }
