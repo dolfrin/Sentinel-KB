@@ -9,6 +9,8 @@ export interface Rule {
   description: string;
   severity: Severity;
   category: string;
+  /** CWE identifier(s) for this rule */
+  cwe?: string[];
   /** File glob patterns to scan */
   filePatterns: string[];
   /** Regex patterns that indicate a vulnerability */
@@ -26,6 +28,7 @@ export const e2eRules: Rule[] = [
     description: "Logging private keys, session state, or decrypted content leaks secrets to logcat/disk",
     severity: "critical",
     category: "E2E Encryption",
+    cwe: ["CWE-532"],
     filePatterns: ["**/*.kt", "**/*.java", "**/*.rs"],
     badPatterns: [
       { pattern: /Log\.[diwev]\(.*(?:private[Kk]ey|secret[Kk]ey|sessionJson|decrypted[Mm]sg|plaintext[Mm]sg|\.password)\s*[,)$]/, message: "Logging sensitive data (key/secret/decrypted content)" },
@@ -40,6 +43,7 @@ export const e2eRules: Rule[] = [
     description: "Encryption keys must never be hardcoded in source",
     severity: "critical",
     category: "E2E Encryption",
+    cwe: ["CWE-321"],
     filePatterns: ["**/*.kt", "**/*.java", "**/*.rs", "**/*.ts", "**/*.js"],
     badPatterns: [
       { pattern: /(?:aes|encryption|cipher|secret)_?[Kk]ey\s*=\s*"[A-Za-z0-9+/=]{16,}"/, message: "Hardcoded encryption key" },
@@ -52,6 +56,7 @@ export const e2eRules: Rule[] = [
     description: "If ratchet state save fails after encrypt/decrypt, messages become unrecoverable",
     severity: "high",
     category: "E2E Encryption",
+    cwe: ["CWE-757"],
     filePatterns: ["**/*Repository*.kt", "**/*Manager*.kt", "**/*Service*.kt", "**/*ViewModel*.kt"],
     badPatterns: [
       { pattern: /ratchetEncrypt\([\s\S]{0,200}(?!withSessionLock|synchronized|mutex)/, message: "Encrypt without session lock — ratchet state may desync" },
@@ -64,6 +69,7 @@ export const e2eRules: Rule[] = [
     description: "Incoming messages must verify sender identity to prevent impersonation",
     severity: "high",
     category: "E2E Encryption",
+    cwe: ["CWE-323"],
     filePatterns: ["**/*Repository*.kt", "**/*Manager*.kt", "**/*Service*.kt"],
     badPatterns: [
       { pattern: /ratchetDecrypt\([\s\S]{0,500}(?!verifySender|senderHint|identityKey)/, message: "Decrypt without sender verification" },
@@ -75,6 +81,7 @@ export const e2eRules: Rule[] = [
     description: "One-time prekeys must be replenished after use to maintain forward secrecy",
     severity: "medium",
     category: "E2E Encryption",
+    cwe: ["CWE-324"],
     filePatterns: ["**/*.kt", "**/*.java"],
     requiredPatterns: [
       { pattern: /replenish|uploadPrekeys|prekey.*upload|refill.*opk/i, message: "No OPK replenishment logic found", filePattern: "**/*Prekey*" },
@@ -86,9 +93,10 @@ export const e2eRules: Rule[] = [
     description: "Comparing MACs, hashes, or tokens with == allows timing attacks",
     severity: "high",
     category: "E2E Encryption",
+    cwe: ["CWE-345"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
-      { pattern: /(?:mac|hmac|hash|digest|signature|token)\w*\s*==\s*\w*(?:mac|hmac|hash|digest|signature|token)/i, message: "Non-constant-time comparison of crypto values — use MessageDigest.isEqual()" },
+      { pattern: /(?:mac|hmac|digest|signature)(?:Bytes|Value|Result|Data)?\s*==\s*\w*(?:mac|hmac|digest|signature)(?:Bytes|Value|Result|Data)?/i, message: "Non-constant-time comparison of crypto values — use MessageDigest.isEqual()" },
     ],
   },
 ];
@@ -102,6 +110,7 @@ export const webrtcRules: Rule[] = [
     description: "TURN server credentials must not be hardcoded",
     severity: "critical",
     category: "WebRTC/P2P",
+    cwe: ["CWE-200"],
     filePatterns: ["**/*.kt", "**/*.java", "**/*.rs", "**/*.ts", "**/*.json"],
     badPatterns: [
       { pattern: /(?:turn|stun):[^\s]*@[^\s]*/, message: "TURN/STUN URI with embedded credentials" },
@@ -114,6 +123,7 @@ export const webrtcRules: Rule[] = [
     description: "Local/mDNS ICE candidates can leak private network topology",
     severity: "medium",
     category: "WebRTC/P2P",
+    cwe: ["CWE-923"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
       { pattern: /onIceCandidate[\s\S]{0,300}(?!filter|mDNS|mdns|strip|sanitize).*send/, message: "ICE candidates sent without filtering — may leak local IPs" },
@@ -125,9 +135,10 @@ export const webrtcRules: Rule[] = [
     description: "DataChannel messages must be authenticated to prevent injection by TURN operator",
     severity: "high",
     category: "WebRTC/P2P",
+    cwe: ["CWE-940"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
-      { pattern: /onMessage[\s\S]{0,200}(?:getString|payload|text)[\s\S]{0,200}(?!verify|authenticate|decrypt|ratchet)/, message: "DataChannel message processed without authentication/decryption" },
+      { pattern: /(?:dataChannel|DataChannel|onDataChannel)[\s\S]{0,200}onMessage[\s\S]{0,200}(?:getString|payload|text)[\s\S]{0,200}(?!verify|authenticate|decrypt|ratchet)/, message: "DataChannel message processed without authentication/decryption" },
     ],
   },
   {
@@ -136,6 +147,7 @@ export const webrtcRules: Rule[] = [
     description: "Logging SDP offers/answers can expose ICE credentials and network topology",
     severity: "medium",
     category: "WebRTC/P2P",
+    cwe: ["CWE-350"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
       { pattern: /Log\.[diwev]\(.*(?:sdp|SDP|description|offer|answer)[\s\S]{0,50}\.description/, message: "Logging SDP content — exposes ICE credentials" },
@@ -147,9 +159,10 @@ export const webrtcRules: Rule[] = [
     description: "WebRTC media must use SRTP encryption — disabling it exposes audio/video",
     severity: "critical",
     category: "WebRTC/P2P",
+    cwe: ["CWE-300"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
-      { pattern: /srtp.*disable|encryption.*false|RtpTransceiver.*unencrypt/i, message: "SRTP encryption disabled for media" },
+      { pattern: /(?:srtp|SRTP)[\s\S]{0,50}(?:disable|off|false)|RtpTransceiver[\s\S]{0,100}unencrypt/i, message: "SRTP encryption disabled for media" },
     ],
   },
   {
@@ -158,6 +171,7 @@ export const webrtcRules: Rule[] = [
     description: "TURN shared secret must come from secure config, not source code",
     severity: "critical",
     category: "WebRTC/P2P",
+    cwe: ["CWE-319"],
     filePatterns: ["**/*.kt", "**/*.java", "**/*.rs", "**/*.env"],
     badPatterns: [
       { pattern: /static.auth.secret\s*[:=]\s*["\w]{16,}/, message: "TURN static-auth-secret hardcoded" },
@@ -174,9 +188,10 @@ export const messengerRules: Rule[] = [
     description: "Push notifications must not contain plaintext message content or sender name when privacy is enabled",
     severity: "high",
     category: "Messenger",
+    cwe: ["CWE-312"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
-      { pattern: /setContentText\(.*(?:content|body|message|text)(?!.*notificationPrivacy|.*privacy)/, message: "Notification may leak message content" },
+      { pattern: /setContentText\(\s*(?:message|msg|body|content|text)\b(?!.*notificationPrivacy|.*privacy|.*getString\(R\.)/, message: "Notification may leak message content" },
     ],
   },
   {
@@ -185,6 +200,7 @@ export const messengerRules: Rule[] = [
     description: "Delivery/read receipts sent via server can reveal who sent messages (breaks sealed sender)",
     severity: "high",
     category: "Messenger",
+    cwe: ["CWE-359"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
       { pattern: /(?:delivered|read|seen|receipt)[\s\S]{0,300}sendToServer(?!.*sealedSender|.*deliveryToken)/, message: "Delivery receipt sent via server may break sealed sender" },
@@ -196,6 +212,7 @@ export const messengerRules: Rule[] = [
     description: "Self-destructing messages must be deleted after TTL — not just hidden in UI",
     severity: "medium",
     category: "Messenger",
+    cwe: ["CWE-212"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
       { pattern: /self_?[Dd]estruct[\s\S]{0,500}(?:visibility|GONE|INVISIBLE)(?!.*delete|.*remove|.*dao)/, message: "Self-destruct message hidden but not deleted from DB" },
@@ -207,6 +224,7 @@ export const messengerRules: Rule[] = [
     description: "Panic PIN must wipe private keys, session state, and DB — not just clear UI",
     severity: "high",
     category: "Messenger",
+    cwe: ["CWE-222"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
       { pattern: /panic[Pp]in[\s\S]{0,500}(?:finish|navigate|clear)(?![\s\S]{0,200}(?:wipe|delete|destroy|removeAll))/, message: "Panic PIN handler may not fully wipe crypto material" },
@@ -218,6 +236,7 @@ export const messengerRules: Rule[] = [
     description: "Sealed sender messages must not store sender identity on server",
     severity: "critical",
     category: "Messenger",
+    cwe: ["CWE-384"],
     filePatterns: ["**/*.rs", "**/*.ts", "**/*.js"],
     badPatterns: [
       { pattern: /is_sealed.*true[\s\S]{0,200}sender_id\s*[:=]\s*(?!None|null|nil|undefined)/, message: "Sealed message stores sender_id on server" },
@@ -229,6 +248,7 @@ export const messengerRules: Rule[] = [
     description: "Group messages must be encrypted individually per member — shared key is weaker",
     severity: "medium",
     category: "Messenger",
+    cwe: ["CWE-524"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
       { pattern: /group.*encrypt[\s\S]{0,200}(?:shared[Kk]ey|group[Kk]ey)(?!.*perMember|.*individual)/, message: "Group messages using shared key instead of per-member encryption" },
@@ -240,6 +260,7 @@ export const messengerRules: Rule[] = [
     description: "Server must never log message content, even encrypted ciphertext (traffic analysis)",
     severity: "high",
     category: "Messenger",
+    cwe: ["CWE-311"],
     filePatterns: ["**/*.rs"],
     badPatterns: [
       { pattern: /tracing::(?:info|debug)\!.*(?:ciphertext|message_ciphertext|content|body|payload)/, message: "Server logs message content/ciphertext" },
@@ -257,9 +278,10 @@ export const androidRules: Rule[] = [
     description: "Exported activities/services/receivers must require permissions to prevent unauthorized access",
     severity: "high",
     category: "Android",
+    cwe: ["CWE-312"],
     filePatterns: ["**/AndroidManifest.xml"],
     badPatterns: [
-      { pattern: /android:exported="true"(?![\s\S]{0,200}android:permission)/, message: "Exported component without permission requirement" },
+      { pattern: /(?:activity|service|receiver|provider)[\s\S]{0,200}android:exported="true"(?![\s\S]{0,200}android:permission)/, message: "Exported component without permission requirement" },
     ],
   },
   {
@@ -268,6 +290,7 @@ export const androidRules: Rule[] = [
     description: "App must enforce HTTPS — cleartext HTTP allows MITM",
     severity: "high",
     category: "Android",
+    cwe: ["CWE-921"],
     filePatterns: ["**/AndroidManifest.xml", "**/network_security_config.xml"],
     badPatterns: [
       { pattern: /android:usesCleartextTraffic="true"/, message: "Cleartext HTTP traffic allowed" },
@@ -280,6 +303,7 @@ export const androidRules: Rule[] = [
     description: "Android auto-backup can exfiltrate SQLCipher DB to Google Drive in plaintext",
     severity: "high",
     category: "Android",
+    cwe: ["CWE-927"],
     filePatterns: ["**/AndroidManifest.xml"],
     badPatterns: [
       { pattern: /android:allowBackup="true"/, message: "Auto-backup enabled — encrypted DB may be exfiltrated" },
@@ -291,6 +315,7 @@ export const androidRules: Rule[] = [
     description: "SQLCipher key should use StrongBox-backed Keystore when available (hardware isolation)",
     severity: "medium",
     category: "Android",
+    cwe: ["CWE-532"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
       { pattern: /KeyGenParameterSpec[\s\S]{0,500}(?!setIsStrongBoxBacked).*\.build\(\)/, message: "KeyGenParameterSpec without StrongBox backing" },
@@ -302,6 +327,7 @@ export const androidRules: Rule[] = [
     description: "WebView with JS enabled can be exploited for XSS / code execution",
     severity: "medium",
     category: "Android",
+    cwe: ["CWE-295"],
     filePatterns: ["**/*.kt", "**/*.java"],
     badPatterns: [
       { pattern: /javaScriptEnabled\s*=\s*true|setJavaScriptEnabled\(true\)/, message: "WebView JavaScript enabled — XSS risk" },
@@ -313,6 +339,7 @@ export const androidRules: Rule[] = [
     description: "Chat and PIN screens should set FLAG_SECURE to prevent screenshots/screen recording",
     severity: "low",
     category: "Android",
+    cwe: ["CWE-319"],
     filePatterns: ["**/*.kt", "**/*.java"],
     requiredPatterns: [
       { pattern: /FLAG_SECURE/, message: "No FLAG_SECURE found — sensitive screens can be screenshotted", filePattern: "**/*Activity*" },
@@ -329,6 +356,7 @@ export const backendRules: Rule[] = [
     description: "Public-facing endpoints that modify data must have rate limiting",
     severity: "medium",
     category: "Backend",
+    cwe: ["CWE-798"],
     filePatterns: ["**/handlers/*.rs"],
     badPatterns: [
       { pattern: /async fn (?:register|login|send_sealed|create|upload)\w*\([^)]*\)[^{]*\{(?![\s\S]{0,300}rate_limiter)/, message: "Public write endpoint without rate limiting" },
@@ -340,6 +368,7 @@ export const backendRules: Rule[] = [
     description: "Holding a DashMap Ref across an await point can deadlock",
     severity: "high",
     category: "Backend",
+    cwe: ["CWE-918"],
     filePatterns: ["**/*.rs"],
     badPatterns: [
       { pattern: /\.get\(&[\w]+\)[\s\S]{0,100}\.await(?![\s\S]{0,20}\.clone\(\))/, message: "DashMap Ref possibly held across .await — clone before awaiting" },
@@ -351,6 +380,7 @@ export const backendRules: Rule[] = [
     description: "SQL queries must use parameterized queries, not string interpolation",
     severity: "critical",
     category: "Backend",
+    cwe: ["CWE-770"],
     filePatterns: ["**/*.rs"],
     badPatterns: [
       { pattern: /format!\(.*(?:SELECT|INSERT|UPDATE|DELETE).*\{/, message: "SQL query built with format! — use parameterized queries" },
@@ -363,6 +393,7 @@ export const backendRules: Rule[] = [
     description: "API routes handling user data must require authentication",
     severity: "high",
     category: "Backend",
+    cwe: ["CWE-942"],
     filePatterns: ["**/*.rs"],
     badPatterns: [
       { pattern: /\.route\("[^"]*(?:message|contact|vault|profile|session)[^"]*",\s*(?:get|post|put|delete)\(\w+\)\)(?![\s\S]{0,100}AuthUser)/, message: "Route handling sensitive data may lack auth middleware" },
@@ -374,6 +405,7 @@ export const backendRules: Rule[] = [
     description: "Error responses must not leak internal state, stack traces, or secrets",
     severity: "medium",
     category: "Backend",
+    cwe: ["CWE-614"],
     filePatterns: ["**/*.rs"],
     badPatterns: [
       { pattern: /AppError::Internal\(format!\(.*(?:password|key|secret|token)/, message: "Error response may leak secrets" },
@@ -385,6 +417,7 @@ export const backendRules: Rule[] = [
     description: "CORS must not allow all origins — limits CSRF protection",
     severity: "high",
     category: "Backend",
+    cwe: ["CWE-613"],
     filePatterns: ["**/*.rs"],
     badPatterns: [
       { pattern: /allow_origin\(.*Any|AllowOrigin::any\(\)|"\*"/, message: "CORS allows wildcard origin" },
@@ -396,6 +429,7 @@ export const backendRules: Rule[] = [
     description: "Unsafe blocks outside known FFI bindings need manual review",
     severity: "medium",
     category: "Backend",
+    cwe: ["CWE-346"],
     filePatterns: ["**/handlers/*.rs", "**/services/*.rs", "**/middleware/*.rs", "**/db/*.rs"],
     badPatterns: [
       { pattern: /unsafe\s*\{/, message: "Unsafe block in application code — verify memory safety" },
@@ -412,6 +446,7 @@ export const injectionRules: Rule[] = [
     description: "SQL queries built with string concatenation or template literals allow SQL injection",
     severity: "critical",
     category: "Injection",
+    cwe: ["CWE-89"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"],
     badPatterns: [
       { pattern: /(?:query|execute|raw)\(\s*[`"'](?:SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)[\s\S]{0,100}\$\{/, message: "SQL query built with template literal interpolation" },
@@ -424,6 +459,7 @@ export const injectionRules: Rule[] = [
     description: "SQL queries built with f-strings or % formatting allow SQL injection",
     severity: "critical",
     category: "Injection",
+    cwe: ["CWE-89"],
     filePatterns: ["**/*.py"],
     badPatterns: [
       { pattern: /(?:execute|executemany|cursor\.execute)\(\s*f["'](?:SELECT|INSERT|UPDATE|DELETE)/, message: "SQL query built with Python f-string" },
@@ -437,9 +473,9 @@ export const injectionRules: Rule[] = [
     description: "SQL queries built with fmt.Sprintf or concatenation allow SQL injection",
     severity: "critical",
     category: "Injection",
+    cwe: ["CWE-89"],
     filePatterns: ["**/*.go"],
     badPatterns: [
-      { pattern: /fmt\.Sprintf\(\s*["'](?:SELECT|INSERT|UPDATE|DELETE|DROP)/, message: "SQL query built with fmt.Sprintf — use parameterized queries" },
       { pattern: /(?:Query|Exec|QueryRow)\(\s*["'](?:SELECT|INSERT|UPDATE|DELETE)[^"']*["']\s*\+/, message: "SQL query concatenated with variable" },
     ],
   },
@@ -449,6 +485,7 @@ export const injectionRules: Rule[] = [
     description: "SQL queries built with string concatenation allow SQL injection",
     severity: "critical",
     category: "Injection",
+    cwe: ["CWE-89"],
     filePatterns: ["**/*.java", "**/*.kt"],
     badPatterns: [
       { pattern: /(?:createStatement|prepareStatement|executeQuery|executeUpdate)\(\s*["'](?:SELECT|INSERT|UPDATE|DELETE)[^"']*["']\s*\+/, message: "SQL query concatenated with variable — use PreparedStatement" },
@@ -461,6 +498,7 @@ export const injectionRules: Rule[] = [
     description: "SQL queries built with string interpolation allow SQL injection",
     severity: "critical",
     category: "Injection",
+    cwe: ["CWE-89"],
     filePatterns: ["**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /(?:where|find_by_sql|execute)\(\s*["'](?:SELECT|INSERT|UPDATE|DELETE)[^"']*#\{/, message: "Ruby: SQL query with string interpolation" },
@@ -474,6 +512,7 @@ export const injectionRules: Rule[] = [
     description: "NoSQL queries with unsanitized user input allow query manipulation",
     severity: "high",
     category: "Injection",
+    cwe: ["CWE-943"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py"],
     badPatterns: [
       { pattern: /\.\s*find\(\s*\{[\s\S]{0,50}(?:req\.body|req\.query|req\.params|request\.)/, message: "MongoDB query with direct user input — risk of NoSQL injection" },
@@ -486,12 +525,13 @@ export const injectionRules: Rule[] = [
     description: "Running shell commands with user-controlled input allows arbitrary command running",
     severity: "critical",
     category: "Injection",
+    cwe: ["CWE-78"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /child_process.*(?:req\.|params\.|query\.|body\.|input|user)/, message: "Node child_process with user input — OS command injection" },
       { pattern: /os\.system\(\s*f?["'].*(?:\{|%s|\+\s*\w)/, message: "Python os.system with dynamic input" },
       { pattern: /subprocess\.(?:call|run|Popen)\(\s*f?["'].*(?:\{|%s)/, message: "Python subprocess with string interpolation — use list form" },
-      { pattern: /Runtime\.getRuntime\(\)/, message: "Java Runtime.getRuntime — verify no user input reaches command" },
+      { pattern: /Runtime\.getRuntime\(\)\.exec\(\s*(?!["'][^"']*["'])/, message: "Java Runtime.exec with dynamic argument — OS command injection risk" },
     ],
   },
   {
@@ -500,6 +540,7 @@ export const injectionRules: Rule[] = [
     description: "LDAP queries with unsanitized input allow filter manipulation",
     severity: "high",
     category: "Injection",
+    cwe: ["CWE-94"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.java", "**/*.go"],
     badPatterns: [
       { pattern: /(?:ldap|LDAP)[\s\S]{0,100}(?:search|filter)[\s\S]{0,100}(?:\$\{|%s|\+\s*(?:req\.|user|input|param))/, message: "LDAP query with unsanitized input" },
@@ -511,6 +552,7 @@ export const injectionRules: Rule[] = [
     description: "XPath queries built with string concatenation allow injection",
     severity: "high",
     category: "Injection",
+    cwe: ["CWE-917"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.java", "**/*.php"],
     badPatterns: [
       { pattern: /(?:xpath|XPath|evaluate)\(\s*["'].*(?:\$\{|\+\s*(?:req\.|user|input|param)|%s|\.format\()/, message: "XPath query with dynamic input — risk of XPath injection" },
@@ -522,9 +564,11 @@ export const injectionRules: Rule[] = [
     description: "Setting HTTP headers with unsanitized input allows response splitting",
     severity: "high",
     category: "Injection",
+    cwe: ["CWE-113"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
-      { pattern: /(?:setHeader|set_header|Header\.Set|header)\(\s*["'][^"']+["'],\s*(?:req\.|params\.|query\.|body\.|input|user)/, message: "HTTP header set with user input — CRLF injection risk" },
+      { pattern: /(?:setHeader|set_header)\(\s*["'][^"']+["'],\s*(?:req\.|request\.|params\.|query\.|body\.|input\[)/, message: "HTTP header set with user input — CRLF injection risk" },
+      { pattern: /Header\.Set\(\s*["'][^"']+["'],\s*(?:r\.(?:URL|Form|Header|Body)|req\.(?:URL|Form|Header|Body))/, message: "Go HTTP header set with request data — CRLF injection risk" },
     ],
   },
 ];
@@ -538,10 +582,11 @@ export const xssRules: Rule[] = [
     description: "Setting innerHTML with dynamic content allows script injection",
     severity: "high",
     category: "XSS",
+    cwe: ["CWE-79"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
     badPatterns: [
-      { pattern: /\.innerHTML\s*=\s*(?!['"][^'"]*['"])/, message: "innerHTML assigned with dynamic value — XSS risk" },
-      { pattern: /\.outerHTML\s*=\s*(?!['"][^'"]*['"])/, message: "outerHTML assigned with dynamic value — XSS risk" },
+      { pattern: /\.innerHTML\s*=\s*(?:req\.|request\.|params\.|query\.|body\.|input\[|user)/, message: "innerHTML assigned with user input — XSS risk" },
+      { pattern: /\.outerHTML\s*=\s*(?:req\.|request\.|params\.|query\.|body\.|input\[|user)/, message: "outerHTML assigned with user input — XSS risk" },
     ],
   },
   {
@@ -550,9 +595,10 @@ export const xssRules: Rule[] = [
     description: "document.write and document.writeln can run injected scripts",
     severity: "high",
     category: "XSS",
+    cwe: ["CWE-79"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.html"],
     badPatterns: [
-      { pattern: /document\.write(?:ln)?\((?!['"][^'"]*['"]\))/, message: "document.write with dynamic content — XSS risk" },
+      { pattern: /document\.write(?:ln)?\(\s*(?:req\.|request\.|params\.|query\.|body\.)/, message: "document.write with user input — XSS risk" },
     ],
   },
   {
@@ -561,9 +607,10 @@ export const xssRules: Rule[] = [
     description: "Using dangerouslySetInnerHTML bypasses React XSS protections",
     severity: "high",
     category: "XSS",
+    cwe: ["CWE-79"],
     filePatterns: ["**/*.tsx", "**/*.jsx", "**/*.ts", "**/*.js"],
     badPatterns: [
-      { pattern: /dangerouslySetInnerHTML/, message: "React unsafe HTML rendering — verify input is sanitized" },
+      { pattern: /dangerouslySetInnerHTML\s*=\s*\{\s*\{\s*__html\s*:\s*(?:req\.|request\.|params\.|query\.|props\.\w+\.\w+|user)/, message: "React dangerouslySetInnerHTML with dynamic input — XSS risk" },
     ],
   },
   {
@@ -572,9 +619,10 @@ export const xssRules: Rule[] = [
     description: "v-html renders raw HTML and can run injected scripts",
     severity: "high",
     category: "XSS",
+    cwe: ["CWE-79"],
     filePatterns: ["**/*.vue", "**/*.ts", "**/*.js"],
     badPatterns: [
-      { pattern: /v-html\s*=/, message: "Vue v-html renders raw HTML — XSS risk" },
+      { pattern: /v-html\s*=\s*["'](?:req\.|request\.|params\.|query\.|body\.|input|user)/, message: "Vue v-html with user input — XSS risk" },
     ],
   },
   {
@@ -583,6 +631,7 @@ export const xssRules: Rule[] = [
     description: "Bypassing Angular sanitization exposes the app to XSS",
     severity: "high",
     category: "XSS",
+    cwe: ["CWE-79"],
     filePatterns: ["**/*.ts", "**/*.js"],
     badPatterns: [
       { pattern: /bypassSecurityTrust(?:Html|Script|Style|Url|ResourceUrl)/, message: "Angular security bypass — XSS risk" },
@@ -594,6 +643,7 @@ export const xssRules: Rule[] = [
     description: "Passing unsanitized input to template engines can lead to SSTI or XSS",
     severity: "high",
     category: "XSS",
+    cwe: ["CWE-79"],
     filePatterns: ["**/*.py", "**/*.rb", "**/*.php", "**/*.ts", "**/*.js"],
     badPatterns: [
       { pattern: /\|safe\}|mark_safe\(|Markup\(|raw\s*%>|html_safe/, message: "Template rendering with safe/raw marker — verify input is sanitized" },
@@ -606,6 +656,7 @@ export const xssRules: Rule[] = [
     description: "jQuery HTML methods with unsanitized input allow XSS",
     severity: "high",
     category: "XSS",
+    cwe: ["CWE-79"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.html"],
     badPatterns: [
       { pattern: /\$\(.*\)\.(?:html|append|prepend|after|before)\(\s*(?!['"][^'"]*['"]\))/, message: "jQuery HTML manipulation with dynamic content — XSS risk" },
@@ -617,6 +668,7 @@ export const xssRules: Rule[] = [
     description: "Dynamic code evaluation constructs run arbitrary code if input is user-controlled",
     severity: "critical",
     category: "XSS",
+    cwe: ["CWE-79"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
     badPatterns: [
       { pattern: /\beval\s*\(\s*(?!['"][^'"]*['"]\))/, message: "Dynamic code evaluation with non-literal input — code injection risk" },
@@ -635,10 +687,11 @@ export const authRules: Rule[] = [
     description: "JWT signing secrets must not be hardcoded — use environment variables or key management",
     severity: "critical",
     category: "Authentication",
+    cwe: ["CWE-347"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /(?:jwt|JWT)[\s\S]{0,50}(?:secret|key)\s*[:=]\s*["'][^"']{8,}["']/, message: "Hardcoded JWT secret" },
-      { pattern: /sign\(\s*\{[\s\S]{0,200}["'][A-Za-z0-9+/=]{16,}["']/, message: "JWT signed with hardcoded secret string" },
+      { pattern: /jwt\.sign\(\s*\{[\s\S]{0,100}["'][A-Za-z0-9+/=]{16,}["']/, message: "JWT signed with hardcoded secret string" },
     ],
   },
   {
@@ -647,6 +700,7 @@ export const authRules: Rule[] = [
     description: "Accepting algorithm 'none' in JWT allows forging tokens without a key",
     severity: "critical",
     category: "Authentication",
+    cwe: ["CWE-287"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /algorithm[s]?\s*[:=]\s*\[?["']none["']/, message: "JWT algorithm 'none' accepted — token forgery possible" },
@@ -659,6 +713,7 @@ export const authRules: Rule[] = [
     description: "JWTs without expiration never become invalid — stolen tokens work forever",
     severity: "high",
     category: "Authentication",
+    cwe: ["CWE-287"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java"],
     badPatterns: [
       { pattern: /jwt\.sign\(\s*\{(?![\s\S]{0,300}(?:exp|expiresIn|expires_in))[\s\S]{0,300}\}/, message: "JWT signed without expiration claim" },
@@ -670,10 +725,11 @@ export const authRules: Rule[] = [
     description: "MD5 and SHA1 are too fast for password hashing — use bcrypt, scrypt, or Argon2",
     severity: "critical",
     category: "Authentication",
+    cwe: ["CWE-916"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
-      { pattern: /(?:md5|MD5|sha1|SHA1)\(.*(?:password|passwd|pwd)/i, message: "Password hashed with MD5/SHA1 — use bcrypt/scrypt/argon2" },
-      { pattern: /(?:createHash|MessageDigest\.getInstance)\(\s*["'](?:md5|sha1|sha-1|MD5|SHA1|SHA-1)["']\)[\s\S]{0,200}(?:password|passwd|pwd)/i, message: "Weak hash algorithm used for passwords" },
+      { pattern: /(?:md5|MD5|sha1|SHA1)\(\s*\$?(?:password|passwd|pwd)\b/i, message: "Password hashed with MD5/SHA1 — use bcrypt/scrypt/argon2" },
+      { pattern: /(?:createHash|MessageDigest\.getInstance|hash)\(\s*["'](?:md5|sha1|sha-1|MD5|SHA1|SHA-1)["']\)[\s\S]{0,100}(?:\$password|\bpassword\b|\bpasswd\b|\bpwd\b)/i, message: "Weak hash algorithm used for passwords" },
       { pattern: /hashlib\.(?:md5|sha1)\(.*(?:password|passwd|pwd)/i, message: "Python: weak hash for password" },
     ],
   },
@@ -683,6 +739,7 @@ export const authRules: Rule[] = [
     description: "Passwords and credentials must not be hardcoded in source code",
     severity: "critical",
     category: "Authentication",
+    cwe: ["CWE-798"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /(?:password|passwd|pwd)\s*[:=]\s*["'][^"']{6,}["'](?!\s*(?:\|\||&&|if|==|!=|:))/, message: "Hardcoded password in source code" },
@@ -694,6 +751,7 @@ export const authRules: Rule[] = [
     description: "Routes handling sensitive data must require authentication",
     severity: "high",
     category: "Authentication",
+    cwe: ["CWE-862"],
     filePatterns: ["**/*.ts", "**/*.js"],
     badPatterns: [
       { pattern: /(?:app|router)\.\s*(?:get|post|put|delete|patch)\(\s*['"]\/(?:api|admin|user|account|profile|settings|dashboard)[^'"]*['"][\s\S]{0,50}(?:req,\s*res)(?![\s\S]{0,200}(?:auth|authenticate|isAuthenticated|requireAuth|protect|verifyToken|isLoggedIn|session))/, message: "Route may lack authentication middleware" },
@@ -705,6 +763,7 @@ export const authRules: Rule[] = [
     description: "Session ID must be regenerated after authentication to prevent session fixation",
     severity: "high",
     category: "Authentication",
+    cwe: ["CWE-307"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.java", "**/*.php"],
     badPatterns: [
       { pattern: /(?:login|authenticate|signIn)[\s\S]{0,500}(?:session\[|req\.session\.)(?![\s\S]{0,200}(?:regenerate|rotate|destroy))/, message: "Session not regenerated after login — session fixation risk" },
@@ -716,6 +775,7 @@ export const authRules: Rule[] = [
     description: "Comparing passwords or tokens with == allows timing attacks",
     severity: "high",
     category: "Authentication",
+    cwe: ["CWE-640"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /(?:password|token|secret|apiKey|api_key)\s*(?:===?|!==?)\s*(?:req\.|params\.|body\.|input|user)/, message: "Timing-unsafe comparison of secret value — use constant-time compare" },
@@ -732,6 +792,7 @@ export const secretsRules: Rule[] = [
     description: "AWS access keys in source code can be harvested by attackers for account compromise",
     severity: "critical",
     category: "Secrets",
+    cwe: ["CWE-693"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php", "**/*.env", "**/*.yml", "**/*.yaml", "**/*.json"],
     badPatterns: [
       { pattern: /AKIA[0-9A-Z]{16}/, message: "AWS access key ID found (AKIA...)" },
@@ -743,6 +804,7 @@ export const secretsRules: Rule[] = [
     description: "AWS secret access keys must be stored in secure vaults, not source code",
     severity: "critical",
     category: "Secrets",
+    cwe: ["CWE-693"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php", "**/*.env", "**/*.yml", "**/*.yaml"],
     badPatterns: [
       { pattern: /(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY|SecretAccessKey)\s*[:=]\s*["'][A-Za-z0-9/+=]{40}["']/, message: "AWS secret access key found" },
@@ -754,6 +816,7 @@ export const secretsRules: Rule[] = [
     description: "API keys in source code should be moved to environment variables or secret management",
     severity: "high",
     category: "Secrets",
+    cwe: ["CWE-16"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /(?:api[_-]?key|apiKey|API_KEY)\s*[:=]\s*["'][A-Za-z0-9_\-]{20,}["']/, message: "API key hardcoded in source" },
@@ -765,6 +828,7 @@ export const secretsRules: Rule[] = [
     description: "Private keys embedded in source code compromise the entire cryptosystem",
     severity: "critical",
     category: "Secrets",
+    cwe: ["CWE-693"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php", "**/*.pem", "**/*.key"],
     badPatterns: [
       { pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/, message: "Private key found in source file" },
@@ -777,6 +841,7 @@ export const secretsRules: Rule[] = [
     description: "Database connection strings with embedded passwords leak credentials if code is exposed",
     severity: "critical",
     category: "Secrets",
+    cwe: ["CWE-693"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php", "**/*.env", "**/*.yml", "**/*.yaml"],
     badPatterns: [
       { pattern: /(?:mysql|postgres|postgresql|mongodb|redis|amqp|mssql):\/\/\w+:[^@\s]{3,}@/, message: "Database connection string with embedded password" },
@@ -788,6 +853,7 @@ export const secretsRules: Rule[] = [
     description: "GitHub personal access tokens and app tokens must not be stored in source code",
     severity: "critical",
     category: "Secrets",
+    cwe: ["CWE-942"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php", "**/*.env", "**/*.yml", "**/*.yaml"],
     badPatterns: [
       { pattern: /ghp_[A-Za-z0-9]{36}/, message: "GitHub personal access token found" },
@@ -802,6 +868,7 @@ export const secretsRules: Rule[] = [
     description: "Hardcoded bearer tokens in source code should be externalized",
     severity: "high",
     category: "Secrets",
+    cwe: ["CWE-16"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /[Bb]earer\s+[A-Za-z0-9_\-\.]{20,}/, message: "Hardcoded bearer token found" },
@@ -814,6 +881,7 @@ export const secretsRules: Rule[] = [
     description: "Webhook URLs contain embedded tokens and should be externalized",
     severity: "high",
     category: "Secrets",
+    cwe: ["CWE-16"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /https:\/\/hooks\.slack\.com\/services\/T[A-Z0-9]+\/B[A-Z0-9]+\/[A-Za-z0-9]+/, message: "Slack webhook URL with token found" },
@@ -826,6 +894,7 @@ export const secretsRules: Rule[] = [
     description: "Google Cloud credentials must not be stored in source code",
     severity: "critical",
     category: "Secrets",
+    cwe: ["CWE-693"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.json", "**/*.yml", "**/*.yaml"],
     badPatterns: [
       { pattern: /AIza[0-9A-Za-z_-]{35}/, message: "Google API key found" },
@@ -838,6 +907,7 @@ export const secretsRules: Rule[] = [
     description: "Payment API keys must be stored securely — leaks lead to financial fraud",
     severity: "critical",
     category: "Secrets",
+    cwe: ["CWE-798"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /sk_live_[0-9a-zA-Z]{24,}/, message: "Stripe live secret key found" },
@@ -855,6 +925,7 @@ export const ssrfCsrfRules: Rule[] = [
     description: "Fetching URLs from user input without validation allows SSRF attacks against internal services",
     severity: "high",
     category: "SSRF/CSRF",
+    cwe: ["CWE-400"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /(?:fetch|axios|request|got|urllib|http\.Get|HttpClient)\(\s*(?:req\.|params\.|query\.|body\.|input|user)/, message: "URL fetched from user input — SSRF risk" },
@@ -867,6 +938,7 @@ export const ssrfCsrfRules: Rule[] = [
     description: "State-changing endpoints must validate CSRF tokens to prevent cross-site request forgery",
     severity: "high",
     category: "SSRF/CSRF",
+    cwe: ["CWE-400"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.java", "**/*.php"],
     badPatterns: [
       { pattern: /(?:app|router)\.\s*(?:post|put|delete|patch)\([\s\S]{0,200}(?:req,\s*res)(?![\s\S]{0,200}(?:csrf|CSRF|csrfToken|_csrf|xsrf|XSRF))/, message: "State-changing endpoint may lack CSRF protection" },
@@ -878,6 +950,7 @@ export const ssrfCsrfRules: Rule[] = [
     description: "Redirecting to user-controlled URLs allows phishing attacks",
     severity: "medium",
     category: "SSRF/CSRF",
+    cwe: ["CWE-319"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /(?:redirect|res\.redirect|Response\.Redirect|sendRedirect|header\(\s*["']Location)\s*\(\s*(?:req\.|params\.|query\.|body\.|input|request\.)/, message: "Redirect to user-controlled URL — open redirect risk" },
@@ -890,6 +963,7 @@ export const ssrfCsrfRules: Rule[] = [
     description: "Reading files from user-specified paths allows path traversal attacks",
     severity: "high",
     category: "SSRF/CSRF",
+    cwe: ["CWE-400"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /(?:readFile|readFileSync|open|fopen|FileReader)\(\s*(?:req\.|params\.|query\.|body\.|input|user)/, message: "File read with user-controlled path — path traversal risk" },
@@ -901,7 +975,8 @@ export const ssrfCsrfRules: Rule[] = [
     description: "CSP header prevents XSS, clickjacking, and other injection attacks",
     severity: "medium",
     category: "SSRF/CSRF",
-    filePatterns: ["**/*.ts", "**/*.js", "**/*.py"],
+    cwe: ["CWE-693"],
+    filePatterns: ["**/server.ts", "**/server.js", "**/app.ts", "**/app.js", "**/app.py"],
     requiredPatterns: [
       { pattern: /content-security-policy|Content-Security-Policy|CSP|helmet|csp/i, message: "No Content-Security-Policy header configuration found", filePattern: "**/server*" },
     ],
@@ -912,9 +987,10 @@ export const ssrfCsrfRules: Rule[] = [
     description: "URL validation at request time can be bypassed by DNS rebinding if not re-checked at connection time",
     severity: "high",
     category: "SSRF/CSRF",
+    cwe: ["CWE-350"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java"],
     badPatterns: [
-      { pattern: /(?:new\s+URL|url\.parse|URL\.parse)\([\s\S]{0,100}(?:hostname|host)[\s\S]{0,100}(?:fetch|request|get|http)/, message: "URL validated then fetched separately — DNS rebinding risk" },
+      { pattern: /(?:new\s+URL|url\.parse)\([^)]+\)\.hostname[\s\S]{0,50}(?:allowlist|whitelist|blocklist|filter)[\s\S]{0,100}(?:fetch|request|http\.get)\(/, message: "URL hostname validated then fetched separately — DNS rebinding risk (re-check at connection time)" },
     ],
   },
 ];
@@ -928,6 +1004,7 @@ export const memorySafetyRules: Rule[] = [
     description: "strcpy does not check buffer bounds — use strncpy or strlcpy",
     severity: "critical",
     category: "Memory Safety",
+    cwe: ["CWE-120"],
     filePatterns: ["**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp"],
     badPatterns: [
       { pattern: /\bstrcpy\s*\(/, message: "strcpy used — no bounds checking, buffer overflow risk" },
@@ -940,6 +1017,7 @@ export const memorySafetyRules: Rule[] = [
     description: "sprintf does not check buffer bounds — use snprintf",
     severity: "critical",
     category: "Memory Safety",
+    cwe: ["CWE-134"],
     filePatterns: ["**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp"],
     badPatterns: [
       { pattern: /\bsprintf\s*\(/, message: "sprintf used — no bounds checking, use snprintf" },
@@ -952,6 +1030,7 @@ export const memorySafetyRules: Rule[] = [
     description: "gets() cannot limit input size and always causes buffer overflow potential — use fgets()",
     severity: "critical",
     category: "Memory Safety",
+    cwe: ["CWE-190"],
     filePatterns: ["**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp"],
     badPatterns: [
       { pattern: /\bgets\s*\(/, message: "gets() is always unsafe — use fgets()" },
@@ -963,6 +1042,7 @@ export const memorySafetyRules: Rule[] = [
     description: "Printf-family functions with user-controlled format strings allow memory read/write",
     severity: "critical",
     category: "Memory Safety",
+    cwe: ["CWE-415"],
     filePatterns: ["**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp"],
     badPatterns: [
       { pattern: /printf\(\s*(?:buf|buffer|input|user|str|data|msg|argv)\w*\s*\)/, message: "printf with variable as format string — use explicit format specifier" },
@@ -976,6 +1056,7 @@ export const memorySafetyRules: Rule[] = [
     description: "Unsafe blocks bypass Rust memory safety guarantees — each one needs careful review",
     severity: "medium",
     category: "Memory Safety",
+    cwe: ["CWE-787"],
     filePatterns: ["**/*.rs"],
     badPatterns: [
       { pattern: /unsafe\s*\{/, message: "Unsafe block — verify memory safety manually" },
@@ -987,9 +1068,10 @@ export const memorySafetyRules: Rule[] = [
     description: "Using a pointer after free() leads to undefined behavior and potential exploitation",
     severity: "critical",
     category: "Memory Safety",
+    cwe: ["CWE-416"],
     filePatterns: ["**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp"],
     badPatterns: [
-      { pattern: /free\(\s*(\w+)\s*\)\s*;(?![\s\S]{0,20}\1\s*=\s*NULL)/, message: "Pointer not set to NULL after free — use-after-free risk" },
+      { pattern: /free\(\s*(\w+)\s*\)\s*;[\s\S]{1,150}\1\s*(?:->|\[)/, message: "Pointer dereferenced after free() — use-after-free vulnerability" },
     ],
   },
   {
@@ -998,6 +1080,7 @@ export const memorySafetyRules: Rule[] = [
     description: "Unchecked integer arithmetic in malloc/calloc size can cause heap overflow",
     severity: "high",
     category: "Memory Safety",
+    cwe: ["CWE-190"],
     filePatterns: ["**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp"],
     badPatterns: [
       { pattern: /malloc\(\s*\w+\s*\*\s*\w+\s*\)/, message: "Multiplication in malloc size — integer overflow risk, use calloc or check overflow" },
@@ -1014,10 +1097,10 @@ export const concurrencyRules: Rule[] = [
     description: "Checking file existence then acting on it creates a TOCTOU race condition",
     severity: "high",
     category: "Concurrency",
+    cwe: ["CWE-367"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
     badPatterns: [
-      { pattern: /(?:existsSync|exists|access|stat)\([\s\S]{0,100}(?:writeFile|unlink|rename|readFile|open|createWriteStream)/, message: "TOCTOU: file existence check then file operation — race condition" },
-      { pattern: /if\s*\(\s*(?:fs\.)?existsSync\(/, message: "Filesystem check-then-act pattern — consider using exclusive file flags instead" },
+      { pattern: /(?:existsSync|access|stat)\([\s\S]{0,50}(?:unlinkSync|unlink|rename|rmSync)\(/, message: "TOCTOU: file existence check then delete/rename — race condition" },
     ],
   },
   {
@@ -1026,6 +1109,7 @@ export const concurrencyRules: Rule[] = [
     description: "Concurrent access to shared mutable state without synchronization causes data races",
     severity: "high",
     category: "Concurrency",
+    cwe: ["CWE-362"],
     filePatterns: ["**/*.go"],
     badPatterns: [
       { pattern: /var\s+\w+\s+(?:map|slice|\[\])[\s\S]{0,500}go\s+func\(\)/, message: "Go: shared variable accessed from goroutine without mutex" },
@@ -1037,9 +1121,10 @@ export const concurrencyRules: Rule[] = [
     description: "Unhandled promises or async operations silently swallow errors",
     severity: "medium",
     category: "Concurrency",
+    cwe: ["CWE-362"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
     badPatterns: [
-      { pattern: /(?:^|\s)(?!return\s|await\s)(?:fetch|axios\.\w+|request)\([^)]*\)\s*;(?!\s*(?:\.then|\.catch))/, message: "Fire-and-forget async call — errors will be silently lost" },
+      { pattern: /(?:^|\s)(?!return\s|await\s)(?:axios\.\w+)\([^)]*\)\s*;(?!\s*(?:\.then|\.catch))/, message: "Fire-and-forget axios call — errors will be silently lost" },
     ],
   },
   {
@@ -1048,9 +1133,10 @@ export const concurrencyRules: Rule[] = [
     description: "Promises without .catch() or try/catch silently swallow rejections",
     severity: "medium",
     category: "Concurrency",
+    cwe: ["CWE-252"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
     badPatterns: [
-      { pattern: /\.then\([^)]*\)\s*;(?!\s*\.catch)/, message: "Promise chain without .catch() — unhandled rejection risk" },
+      { pattern: /\.then\(\s*\w+\s*\)\s*;(?!\s*\.catch)/, message: "Promise .then() without .catch() or reject handler — unhandled rejection risk" },
     ],
   },
   {
@@ -1059,6 +1145,7 @@ export const concurrencyRules: Rule[] = [
     description: "Modifying shared state in concurrent request handlers causes race conditions",
     severity: "high",
     category: "Concurrency",
+    cwe: ["CWE-362"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py"],
     badPatterns: [
       { pattern: /(?:let|var)\s+\w+\s*=\s*(?:0|{|}|\[|\]|new Map|new Set)[\s\S]{0,300}(?:app|router)\.\s*(?:get|post|put|delete)\(/, message: "Module-level mutable variable near route handlers — race condition risk" },
@@ -1075,6 +1162,7 @@ export const dependencyRules: Rule[] = [
     description: "pickle.loads with untrusted input allows arbitrary code running on the server",
     severity: "critical",
     category: "Deserialization",
+    cwe: ["CWE-502"],
     filePatterns: ["**/*.py"],
     badPatterns: [
       { pattern: /pickle\.loads?\(/, message: "Python pickle deserialization — RCE risk with untrusted input" },
@@ -1088,6 +1176,7 @@ export const dependencyRules: Rule[] = [
     description: "Marshal.load with untrusted input allows arbitrary code running",
     severity: "critical",
     category: "Deserialization",
+    cwe: ["CWE-502"],
     filePatterns: ["**/*.rb"],
     badPatterns: [
       { pattern: /Marshal\.load\(/, message: "Ruby Marshal.load — RCE risk with untrusted input" },
@@ -1100,10 +1189,10 @@ export const dependencyRules: Rule[] = [
     description: "unserialize with untrusted input allows object injection and code running",
     severity: "critical",
     category: "Deserialization",
+    cwe: ["CWE-502"],
     filePatterns: ["**/*.php"],
     badPatterns: [
-      { pattern: /\bunserialize\(\s*\$(?:_GET|_POST|_REQUEST|_COOKIE|input)/, message: "PHP unserialize with user input — object injection risk" },
-      { pattern: /\bunserialize\(/, message: "PHP unserialize — verify input is not user-controlled" },
+      { pattern: /\bunserialize\(\s*\$(?:_GET|_POST|_REQUEST|_COOKIE|_SERVER)/, message: "PHP unserialize with user input — object injection risk" },
     ],
   },
   {
@@ -1112,6 +1201,7 @@ export const dependencyRules: Rule[] = [
     description: "Java ObjectInputStream.readObject with untrusted data allows arbitrary code running",
     severity: "critical",
     category: "Deserialization",
+    cwe: ["CWE-502"],
     filePatterns: ["**/*.java", "**/*.kt"],
     badPatterns: [
       { pattern: /ObjectInputStream[\s\S]{0,100}readObject\(\)/, message: "Java ObjectInputStream deserialization — RCE risk with untrusted input" },
@@ -1124,6 +1214,7 @@ export const dependencyRules: Rule[] = [
     description: "Merging user input into objects can modify Object.prototype and compromise the application",
     severity: "high",
     category: "Deserialization",
+    cwe: ["CWE-502"],
     filePatterns: ["**/*.ts", "**/*.js"],
     badPatterns: [
       { pattern: /Object\.assign\(\s*\{\}\s*,\s*(?:req\.|params\.|query\.|body\.|input|user)/, message: "Object.assign with user input — prototype pollution risk" },
@@ -1137,6 +1228,7 @@ export const dependencyRules: Rule[] = [
     description: "Evaluating dynamically constructed code from user input allows arbitrary code running",
     severity: "critical",
     category: "Deserialization",
+    cwe: ["CWE-502"],
     filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.rb", "**/*.php"],
     badPatterns: [
       { pattern: /\beval\s*\(\s*(?:req\.|params\.|query\.|body\.|input|user)/, message: "Dynamic evaluation of user input — code injection" },
@@ -1149,10 +1241,2660 @@ export const dependencyRules: Rule[] = [
     description: "YAML.load/yaml.load without safe loader allows code running via crafted YAML",
     severity: "high",
     category: "Deserialization",
+    cwe: ["CWE-502"],
     filePatterns: ["**/*.py", "**/*.ts", "**/*.js"],
     badPatterns: [
       { pattern: /yaml\.load\(\s*(?!.*Loader\s*=\s*(?:yaml\.)?SafeLoader)/, message: "Python yaml.load without SafeLoader — code running risk" },
       { pattern: /yaml\.(?:unsafe_load|full_load)\(/, message: "Python unsafe YAML loading — code running risk" },
+    ],
+  },
+];
+
+// ─── Cloud & Infrastructure ────────────────────────────────────
+
+export const cloudRules: Rule[] = [
+  {
+    id: "CLOUD-001",
+    name: "AWS access key in source",
+    description: "AWS access key IDs in source code allow account takeover if the repository is exposed",
+    severity: "critical",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-798"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.env", "**/*.yml", "**/*.yaml", "**/*.tf", "**/*.tfvars"],
+    badPatterns: [
+      { pattern: /AKIA[0-9A-Z]{16}/, message: "AWS access key ID found (AKIA...)" },
+    ],
+  },
+  {
+    id: "CLOUD-002",
+    name: "AWS secret key hardcoded",
+    description: "AWS secret access keys must be stored in a vault or environment, never in source code",
+    severity: "critical",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-522"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.env", "**/*.yml", "**/*.yaml", "**/*.tf", "**/*.tfvars"],
+    badPatterns: [
+      { pattern: /(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY|SecretAccessKey)\s*[:=]\s*["'][A-Za-z0-9/+=]{40}["']/, message: "AWS secret access key hardcoded in source" },
+      { pattern: /(?:aws_secret_access_key|secret_key)\s*=\s*"[A-Za-z0-9/+=]{30,}"/, message: "AWS secret key assigned as string literal" },
+    ],
+  },
+  {
+    id: "CLOUD-003",
+    name: "GCP service account key in source",
+    description: "GCP service account JSON keys grant persistent access and must not be committed to source control",
+    severity: "critical",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-311"],
+    filePatterns: ["**/*.json", "**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.yml", "**/*.yaml"],
+    badPatterns: [
+      { pattern: /"type"\s*:\s*"service_account"/, message: "GCP service account key file found in source" },
+    ],
+  },
+  {
+    id: "CLOUD-004",
+    name: "Azure connection string exposed",
+    description: "Azure connection strings with AccountKey grant full storage access and must be externalized",
+    severity: "critical",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-250"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.env", "**/*.yml", "**/*.yaml", "**/*.tf"],
+    badPatterns: [
+      { pattern: /AccountKey=[A-Za-z0-9+/=]{40,}/, message: "Azure storage AccountKey found in connection string" },
+      { pattern: /DefaultEndpointsProtocol=https?;AccountName=\w+;AccountKey=/, message: "Azure connection string with embedded credentials" },
+    ],
+  },
+  {
+    id: "CLOUD-005",
+    name: "S3 bucket public ACL",
+    description: "Public ACLs on S3 buckets expose data to the internet — use bucket policies instead",
+    severity: "high",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-798"],
+    filePatterns: ["**/*.tf", "**/*.tfvars", "**/*.json", "**/*.yml", "**/*.yaml", "**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java"],
+    badPatterns: [
+      { pattern: /acl\s*[:=]\s*["']public-read["']/, message: "S3 bucket ACL set to public-read" },
+      { pattern: /acl\s*[:=]\s*["']public-read-write["']/, message: "S3 bucket ACL set to public-read-write — full public access" },
+      { pattern: /PublicRead|PublicReadWrite|public-read/, message: "S3 public ACL configuration detected" },
+    ],
+  },
+  {
+    id: "CLOUD-006",
+    name: "Security group allows 0.0.0.0/0",
+    description: "Ingress rules allowing 0.0.0.0/0 expose services to the entire internet",
+    severity: "high",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-311"],
+    filePatterns: ["**/*.tf", "**/*.tfvars", "**/*.json", "**/*.yml", "**/*.yaml"],
+    badPatterns: [
+      { pattern: /cidr_blocks\s*=\s*\[\s*"0\.0\.0\.0\/0"\s*\]/, message: "Security group ingress allows all IPs (0.0.0.0/0)" },
+      { pattern: /CidrIp\s*:\s*["']0\.0\.0\.0\/0["']/, message: "CloudFormation security group open to 0.0.0.0/0" },
+      { pattern: /source_address_prefix\s*=\s*["']\*["']/, message: "Azure NSG allows all source addresses" },
+    ],
+  },
+  {
+    id: "CLOUD-007",
+    name: "Unencrypted S3 bucket",
+    description: "S3 buckets should have server-side encryption enabled to protect data at rest",
+    severity: "medium",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-532"],
+    filePatterns: ["**/*.tf", "**/*.tfvars", "**/*.json", "**/*.yml", "**/*.yaml"],
+    badPatterns: [
+      { pattern: /resource\s+"aws_s3_bucket"\s+"[^"]+"\s*\{(?![\s\S]{0,500}(?:server_side_encryption_configuration|aws_s3_bucket_server_side_encryption))[\s\S]{0,500}\}/, message: "S3 bucket defined without server-side encryption configuration" },
+    ],
+  },
+  {
+    id: "CLOUD-008",
+    name: "IAM wildcard permissions",
+    description: "IAM policies with wildcard Action or Resource grant overly broad access",
+    severity: "high",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-250"],
+    filePatterns: ["**/*.tf", "**/*.tfvars", "**/*.json", "**/*.yml", "**/*.yaml"],
+    badPatterns: [
+      { pattern: /"Action"\s*:\s*"\*"/, message: "IAM policy grants wildcard Action — overly permissive" },
+      { pattern: /"Resource"\s*:\s*"\*"/, message: "IAM policy grants wildcard Resource — overly permissive" },
+      { pattern: /"Effect"\s*:\s*"Allow"[\s\S]{0,200}"Action"\s*:\s*\[?\s*"\*"/, message: "IAM Allow with wildcard Action — admin-level access" },
+    ],
+  },
+  {
+    id: "CLOUD-009",
+    name: "Hardcoded cloud endpoint with credentials",
+    description: "Cloud service URLs with embedded credentials should use IAM roles or environment variables",
+    severity: "medium",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-276"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /https?:\/\/\w+:\w+@[\w.-]*(?:amazonaws\.com|googleapis\.com|azure\.com|blob\.core\.windows\.net)/, message: "Cloud endpoint URL with embedded credentials" },
+      { pattern: /(?:endpoint|url)\s*[:=]\s*["']https?:\/\/[\w.-]*(?:amazonaws|googleapis|azure)[\s\S]{0,50}(?:key|token|secret|password)\s*[:=]/, message: "Hardcoded cloud endpoint near credential assignment" },
+    ],
+  },
+  {
+    id: "CLOUD-010",
+    name: "Terraform state contains secrets",
+    description: "Terraform state files contain plaintext secrets and must not be committed to source control",
+    severity: "critical",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-319"],
+    filePatterns: ["**/*.tfstate", "**/*.tfstate.backup"],
+    badPatterns: [
+      { pattern: /"serial"\s*:\s*\d+/, message: "Terraform state file found in repository — contains plaintext secrets" },
+    ],
+  },
+  {
+    id: "CLOUD-011",
+    name: "Docker socket mounted",
+    description: "Mounting the Docker socket into a container grants full control over the host Docker daemon",
+    severity: "critical",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-538"],
+    filePatterns: ["**/docker-compose*.yml", "**/docker-compose*.yaml", "**/*.yml", "**/*.yaml", "**/*.json"],
+    badPatterns: [
+      { pattern: /^\s*-\s*.*\/var\/run\/docker\.sock/, message: "Docker socket mounted — container can control host Docker daemon" },
+    ],
+  },
+  {
+    id: "CLOUD-012",
+    name: "Container running as root",
+    description: "Containers should run as a non-root user to limit the blast radius of container escapes",
+    severity: "high",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-250"],
+    filePatterns: ["**/Dockerfile", "**/Dockerfile.*", "**/*.dockerfile"],
+    requiredPatterns: [
+      { pattern: /^USER\s+(?!root)\S+/m, message: "Dockerfile has no USER directive — container runs as root", filePattern: "**/Dockerfile*" },
+    ],
+  },
+  {
+    id: "CLOUD-013",
+    name: "Privileged container",
+    description: "Privileged containers have full access to host devices and kernel — avoid unless strictly necessary",
+    severity: "critical",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-250"],
+    filePatterns: ["**/*.yml", "**/*.yaml", "**/*.json", "**/docker-compose*.yml", "**/docker-compose*.yaml"],
+    badPatterns: [
+      { pattern: /privileged\s*:\s*true/, message: "Container running in privileged mode — full host access" },
+    ],
+  },
+  {
+    id: "CLOUD-014",
+    name: "K8s secrets in plaintext",
+    description: "Kubernetes Secret manifests with base64-encoded data are not encrypted — use sealed secrets or external secret managers",
+    severity: "high",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-312"],
+    filePatterns: ["**/*.yml", "**/*.yaml"],
+    badPatterns: [
+      { pattern: /kind:\s*Secret[\s\S]{0,200}data:\s*\n(?:\s+\w+:\s*[A-Za-z0-9+/=]+\s*\n)+/, message: "Kubernetes Secret with plaintext (base64) data in manifest" },
+      { pattern: /kind:\s*Secret[\s\S]{0,200}stringData:/, message: "Kubernetes Secret with stringData — plaintext secrets in manifest" },
+    ],
+  },
+  {
+    id: "CLOUD-015",
+    name: "Helm values with passwords",
+    description: "Passwords and secrets in Helm values.yaml files end up in plaintext in cluster — use secret references",
+    severity: "high",
+    category: "Cloud & Infrastructure",
+    cwe: ["CWE-798"],
+    filePatterns: ["**/values.yaml", "**/values.yml", "**/values-*.yaml", "**/values-*.yml"],
+    badPatterns: [
+      { pattern: /(?:password|secret|token|apiKey|api_key)\s*:\s*["'][^"']{4,}["']/, message: "Password/secret hardcoded in Helm values file" },
+      { pattern: /(?:password|secret|token|apiKey|api_key)\s*:\s*[A-Za-z0-9_\-]{8,}/, message: "Credential value in Helm values file — use secret references" },
+    ],
+  },
+];
+
+// ─── API Security ──────────────────────────────────────────────
+
+export const apiSecurityRules: Rule[] = [
+  {
+    id: "API-001",
+    name: "No rate limiting on auth endpoint",
+    description: "Authentication endpoints without rate limiting are vulnerable to brute-force and credential stuffing attacks",
+    severity: "high",
+    category: "API Security",
+    cwe: ["CWE-311"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:app|router)\.\s*(?:post|put)\(\s*['"]\/(?:api\/)?(?:login|signin|sign-in|authenticate|auth\/login|auth\/token)[^'"]*['"][\s\S]{0,200}(?:req,\s*res)(?![\s\S]{0,300}(?:rateLimit|rateLimiter|throttle|limiter|bruteForce))/, message: "Auth endpoint without rate limiting — brute-force risk" },
+      { pattern: /@(?:Post|RequestMapping)\(\s*["']\/(?:login|signin|authenticate|auth\/token)["']\)(?![\s\S]{0,300}(?:RateLimit|Throttle|rateLimiter))/, message: "Java/Kotlin auth endpoint without rate limiting annotation" },
+    ],
+  },
+  {
+    id: "API-002",
+    name: "GraphQL introspection enabled in production",
+    description: "GraphQL introspection reveals the entire API schema to attackers — disable in production",
+    severity: "medium",
+    category: "API Security",
+    cwe: ["CWE-770"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /introspection\s*:\s*true/, message: "GraphQL introspection explicitly enabled — disable in production" },
+      { pattern: /introspection\s*[:=]\s*(?!false|False|process\.env|os\.environ|config)/, message: "GraphQL introspection may be enabled — verify it is disabled in production" },
+    ],
+  },
+  {
+    id: "API-003",
+    name: "REST API without authentication middleware",
+    description: "API routes handling sensitive data must require authentication middleware",
+    severity: "high",
+    category: "API Security",
+    cwe: ["CWE-863"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:app|router)\.\s*(?:get|post|put|delete|patch)\(\s*['"]\/api\/(?:users|accounts|payments|orders|admin|settings|billing)[^'"]*['"],\s*(?:async\s*)?\(\s*req/, message: "API route appears to lack authentication middleware before handler" },
+      { pattern: /(?:app|router)\.\s*(?:get|post|put|delete|patch)\(\s*['"]\/api\/(?:users|accounts|payments|orders|admin|settings|billing)[^'"]*['"],\s*\w+Controller\b(?![\s\S]{0,100}(?:auth|Auth|protect|guard))/, message: "Controller route without auth middleware in chain" },
+    ],
+  },
+  {
+    id: "API-004",
+    name: "CORS allows all origins",
+    description: "Wildcard CORS origin allows any website to make authenticated requests to the API",
+    severity: "high",
+    category: "API Security",
+    cwe: ["CWE-770"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /origin\s*:\s*['"]?\*['"]?/, message: "CORS origin set to wildcard — any site can make requests" },
+      { pattern: /Access-Control-Allow-Origin\s*[:=]\s*['"]?\*['"]?/, message: "Access-Control-Allow-Origin header set to wildcard" },
+      { pattern: /cors\(\s*\)(?!\s*\()/, message: "CORS enabled with default config — may allow all origins" },
+      { pattern: /AllowAllOrigins\s*:\s*true/, message: "Go CORS AllowAllOrigins enabled" },
+    ],
+  },
+  {
+    id: "API-005",
+    name: "API key in URL query parameter",
+    description: "API keys in query strings appear in server logs, browser history, and referrer headers",
+    severity: "medium",
+    category: "API Security",
+    cwe: ["CWE-918"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /[?&](?:api_key|apikey|apiKey|api-key|access_token|token)=[A-Za-z0-9_\-]{8,}/, message: "API key passed as URL query parameter — use headers instead" },
+      { pattern: /\$\{.*\}.*[?&](?:api_key|apikey|apiKey|token)=/, message: "API key interpolated into URL query string" },
+      { pattern: /\+\s*["'][\?&](?:api_key|apikey|apiKey|token)=["']\s*\+/, message: "API key concatenated into URL query string" },
+    ],
+  },
+  {
+    id: "API-006",
+    name: "Missing Content-Type validation",
+    description: "Endpoints that accept POST/PUT without validating Content-Type may process unexpected data formats",
+    severity: "medium",
+    category: "API Security",
+    cwe: ["CWE-611"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java"],
+    badPatterns: [
+      { pattern: /(?:app|router)\.\s*(?:post|put)\([\s\S]{0,300}(?:req\.body)(?![\s\S]{0,200}(?:content-type|Content-Type|contentType|is\(|accepts\())/, message: "POST/PUT handler accesses body without Content-Type validation" },
+    ],
+  },
+  {
+    id: "API-007",
+    name: "Verbose error messages to client",
+    description: "Sending stack traces or internal error details to clients reveals implementation details to attackers",
+    severity: "medium",
+    category: "API Security",
+    cwe: ["CWE-863"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /res\.(?:json|send)\(\s*\{[\s\S]{0,200}(?:stack|stackTrace|stack_trace)\s*[:=]/, message: "Stack trace sent in API response" },
+      { pattern: /(?:catch|except|rescue)[\s\S]{0,200}(?:res\.(?:json|send|status)|return\s+Response|JsonResponse)\([\s\S]{0,100}(?:err\.message|e\.message|error\.message|str\(e\)|e\.toString)/, message: "Internal error message sent to client" },
+      { pattern: /(?:traceback\.format_exc|traceback\.print_exc)[\s\S]{0,200}(?:response|return|json)/, message: "Python traceback included in API response" },
+    ],
+  },
+  {
+    id: "API-008",
+    name: "No request size limit",
+    description: "APIs without request body size limits are vulnerable to denial-of-service via oversized payloads",
+    severity: "medium",
+    category: "API Security",
+    cwe: ["CWE-200"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java"],
+    badPatterns: [
+      { pattern: /express\.json\(\s*\)(?!\s*\{|\s*,)/, message: "express.json() without size limit — DoS risk from large payloads" },
+      { pattern: /bodyParser\.json\(\s*\)/, message: "bodyParser.json() without limit option — DoS risk" },
+      { pattern: /app\.use\(\s*express\.json\(\)\s*\)/, message: "express.json() middleware without limit configuration" },
+    ],
+  },
+  {
+    id: "API-009",
+    name: "Unvalidated redirect URL",
+    description: "Redirecting to URLs without validation allows open redirect and phishing attacks",
+    severity: "high",
+    category: "API Security",
+    cwe: ["CWE-434"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:redirect|res\.redirect)\(\s*(?:req\.query|req\.params|req\.body)\[?\s*['"]?(?:url|redirect|next|return_url|callback|goto|dest|target)/, message: "Redirect using unvalidated user-supplied URL" },
+      { pattern: /(?:redirect|sendRedirect|header\(\s*['"]Location)\s*\(\s*(?:params|request\.args|request\.GET|request\.POST)\[?\s*['"]?(?:url|redirect|next|return_url|callback)/, message: "Redirect target taken from user parameter without validation" },
+    ],
+  },
+  {
+    id: "API-010",
+    name: "JWT none algorithm accepted",
+    description: "Accepting the 'none' algorithm in JWT allows attackers to forge valid tokens without a key",
+    severity: "critical",
+    category: "API Security",
+    cwe: ["CWE-352"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /algorithms\s*[:=]\s*\[[\s\S]{0,100}["']none["']/, message: "JWT verification accepts 'none' algorithm — token forgery possible" },
+      { pattern: /algorithm\s*[:=]\s*["']none["']/, message: "JWT algorithm set to 'none' — no signature verification" },
+      { pattern: /verify\s*[:=]\s*false[\s\S]{0,100}(?:jwt|JWT|token)/, message: "JWT verification disabled — tokens not validated" },
+    ],
+  },
+  {
+    id: "API-011",
+    name: "Missing HSTS header",
+    description: "Without Strict-Transport-Security, browsers may connect over HTTP allowing MITM attacks",
+    severity: "medium",
+    category: "API Security",
+    cwe: ["CWE-693"],
+    filePatterns: ["**/server.ts", "**/server.js", "**/app.ts", "**/app.js", "**/app.py", "**/main.go", "**/application.rb", "**/index.php"],
+    requiredPatterns: [
+      { pattern: /Strict-Transport-Security|strict-transport-security|hsts|HSTS|helmet/, message: "No Strict-Transport-Security (HSTS) header configuration found", filePattern: "**/server*" },
+    ],
+  },
+  {
+    id: "API-012",
+    name: "Open redirect vulnerability",
+    description: "Redirecting to user-supplied URLs without allowlist validation enables phishing attacks",
+    severity: "high",
+    category: "API Security",
+    cwe: ["CWE-601"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:window\.location|location\.href|location\.assign|location\.replace)\s*=\s*(?:params|query|searchParams|URLSearchParams)/, message: "Client-side redirect to user-controlled URL — open redirect" },
+      { pattern: /(?:window\.location|location\.href)\s*=\s*(?:new URL|decodeURI|unescape)\(/, message: "Client-side redirect with decoded URL — open redirect risk" },
+      { pattern: /302[\s\S]{0,50}(?:req\.query|req\.params|request\.args|request\.GET)\[?\s*['"]?(?:url|redirect|next|return|goto|destination)/, message: "302 redirect to user-supplied URL parameter" },
+    ],
+  },
+];
+
+// ─── Cryptography ──────────────────────────────────────────────
+
+export const cryptoRules: Rule[] = [
+  {
+    id: "CRYPTO-001",
+    name: "MD5 for security purposes",
+    description: "MD5 is cryptographically broken — do not use for password hashing, integrity verification, or digital signatures",
+    severity: "high",
+    category: "Cryptography",
+    cwe: ["CWE-327"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /(?:createHash|MessageDigest\.getInstance|hashlib\.)\s*\(?\s*["'](?:md5|MD5)["']/, message: "MD5 hash used — MD5 is cryptographically broken" },
+      { pattern: /MD5\.(?:hash|digest|hexdigest|update|Create)\(/, message: "MD5 function call — do not use for security purposes" },
+      { pattern: /Md5::(?:new|digest|compute)\(/, message: "Rust MD5 usage — do not use for security purposes" },
+      { pattern: /md5\s*\(.*(?:password|passwd|pwd|token|secret|signature|verify|cert)/i, message: "MD5 used for security-sensitive operation" },
+    ],
+  },
+  {
+    id: "CRYPTO-002",
+    name: "SHA1 for security purposes",
+    description: "SHA1 has known collision attacks — do not use for signatures, certificates, or integrity verification",
+    severity: "high",
+    category: "Cryptography",
+    cwe: ["CWE-327"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /(?:createHash|MessageDigest\.getInstance|hashlib\.)\s*\(?\s*["'](?:sha-?1|SHA-?1)["']/, message: "SHA1 hash used — SHA1 has known collision attacks" },
+      { pattern: /SHA1\.(?:hash|digest|hexdigest|update|Create)\(/, message: "SHA1 function call — do not use for security purposes" },
+      { pattern: /Sha1::(?:new|digest|compute)\(/, message: "Rust SHA1 usage — do not use for security purposes" },
+      { pattern: /sha1\s*\(.*(?:signature|cert|certificate|verify|sign)/i, message: "SHA1 used for signatures or certificates" },
+    ],
+  },
+  {
+    id: "CRYPTO-003",
+    name: "ECB mode encryption",
+    description: "ECB mode encrypts identical plaintext blocks to identical ciphertext — leaks patterns in data",
+    severity: "critical",
+    category: "Cryptography",
+    cwe: ["CWE-327"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /AES\/ECB|AES_ECB|aes-ecb|aes_ecb/, message: "AES in ECB mode — leaks data patterns, use CBC/GCM instead" },
+      { pattern: /(?:Cipher|cipher)[\s\S]{0,50}["']?ECB["']?/, message: "ECB cipher mode — leaks data patterns" },
+      { pattern: /MODE_ECB|ECB_Mode|ecb_mode|CipherMode\.ECB/, message: "ECB encryption mode selected — use GCM or CBC" },
+      { pattern: /(?:CKM_AES_ECB|ALGO_AES_ECB|EVP_aes_\d+_ecb)/, message: "Low-level ECB mode API call" },
+    ],
+  },
+  {
+    id: "CRYPTO-004",
+    name: "Static IV/nonce",
+    description: "Reusing IVs or nonces with the same key completely breaks confidentiality in stream ciphers and GCM",
+    severity: "critical",
+    category: "Cryptography",
+    cwe: ["CWE-330"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /(?:iv|IV|nonce|NONCE)\s*[:=]\s*(?:new\s+Uint8Array\(\[[\d,\s]+\]\)|Buffer\.from\(["'][^"']+["']\)|\[[\d,\s]+\]|bytes\([\d,\s]+\)|b["'][^"']+["']|"[0-9a-fA-F]+"|\{[\d,\s]+\})/, message: "Hardcoded IV/nonce — each encryption must use a unique random IV" },
+      { pattern: /(?:val|var|let|const|static)\s+(?:iv|IV|nonce|NONCE)\s*=\s*(?:0x[\da-fA-F]+|\d+|"[^"]+"|'[^']+')/, message: "Static IV/nonce assignment — use cryptographic random generation" },
+    ],
+  },
+  {
+    id: "CRYPTO-005",
+    name: "Weak key size",
+    description: "Short cryptographic keys can be brute-forced — use RSA >= 2048 bits and AES >= 128 bits",
+    severity: "high",
+    category: "Cryptography",
+    cwe: ["CWE-326"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /(?:keySize|key_size|KeySize|key_length|KeyLength|keyLength)\s*[:=]\s*(?:512|768|1024)\b/, message: "RSA key size too small — use at least 2048 bits" },
+      { pattern: /RSA[\s\S]{0,100}(?:1024|768|512)\s*(?:bits|bit|\))/, message: "RSA key generation with weak key size" },
+      { pattern: /(?:generateKey|KeyGenerator)[\s\S]{0,100}(?:keySize|key_size|init)\s*[\(=:]\s*(?:64|56)\b/, message: "Symmetric key size too small — use at least 128 bits" },
+    ],
+  },
+  {
+    id: "CRYPTO-006",
+    name: "Math.random for security",
+    description: "Math.random is not cryptographically secure — use crypto.getRandomValues or crypto.randomBytes for security",
+    severity: "critical",
+    category: "Cryptography",
+    cwe: ["CWE-330"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+    badPatterns: [
+      { pattern: /(?:token|secret|password|salt|nonce|csrf|session[Ii]d|auth[Tt]oken)\w*\s*[:=]\s*.*Math\.random\(\)/i, message: "Security-sensitive value generated with Math.random — use crypto.getRandomValues" },
+      { pattern: /Math\.random\(\)\.toString\(36\)/, message: "Math.random().toString(36) used for ID/token generation — not cryptographically secure" },
+    ],
+  },
+  {
+    id: "CRYPTO-007",
+    name: "Predictable seed",
+    description: "Using static or predictable seeds for random number generators makes output reproducible by attackers",
+    severity: "high",
+    category: "Cryptography",
+    cwe: ["CWE-338"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /(?:Random|random\.Random|rand\.New|srand|SeedRandom)\(\s*(?:0|1|42|12345|123456|1234567890)\s*\)/, message: "Random number generator initialized with predictable seed" },
+      { pattern: /(?:random\.seed|np\.random\.seed|torch\.manual_seed)\(\s*(?:\d{1,10})\s*\)/, message: "Python random seed set to static value" },
+      { pattern: /SecureRandom\(\s*\)[\s\S]{0,50}\.setSeed\(\s*\d/, message: "Java SecureRandom re-seeded with static value — undermines security" },
+    ],
+  },
+  {
+    id: "CRYPTO-008",
+    name: "Insecure TLS version",
+    description: "TLS 1.0, TLS 1.1, and SSLv3 have known vulnerabilities — use TLS 1.2 or 1.3",
+    severity: "high",
+    category: "Cryptography",
+    cwe: ["CWE-327"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /(?:TLSv1_0|TLSv1_1|TLS_1_0|TLS_1_1|SSLv3|SSLv2|ssl\.PROTOCOL_TLSv1(?:_1)?)/, message: "Insecure TLS/SSL protocol version — use TLS 1.2+" },
+      { pattern: /(?:minVersion|min_version|MinVersion)\s*[:=]\s*["']?(?:TLSv1\.?0?|TLSv1\.1|SSLv3|tls\.VersionTLS10|tls\.VersionTLS11)["']?/, message: "Minimum TLS version set too low — use TLS 1.2+" },
+      { pattern: /(?:secureProtocol|secure_protocol)\s*[:=]\s*["'](?:TLSv1_method|TLSv1_1_method|SSLv3_method|SSLv23_method)["']/, message: "Insecure TLS protocol method configured" },
+    ],
+  },
+  {
+    id: "CRYPTO-009",
+    name: "Certificate validation disabled",
+    description: "Disabling certificate validation allows man-in-the-middle attacks on all TLS connections",
+    severity: "critical",
+    category: "Cryptography",
+    cwe: ["CWE-295"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /rejectUnauthorized\s*:\s*false/, message: "Node.js TLS certificate validation disabled" },
+      { pattern: /verify\s*[:=]\s*(?:false|False)[\s\S]{0,50}(?:requests|http|ssl|tls)/i, message: "SSL/TLS certificate verification disabled" },
+      { pattern: /CERT_NONE|CERT_OPTIONAL|ssl\._create_unverified_context/, message: "Python SSL certificate verification disabled" },
+      { pattern: /InsecureSkipVerify\s*:\s*true/, message: "Go TLS InsecureSkipVerify enabled — no certificate validation" },
+      { pattern: /TrustAllCerts|X509TrustManager[\s\S]{0,200}return\s*;[\s\S]{0,50}checkServerTrusted/, message: "Java trust manager accepts all certificates" },
+      { pattern: /NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0['"]?/, message: "Node.js TLS validation globally disabled via environment variable" },
+    ],
+  },
+  {
+    id: "CRYPTO-010",
+    name: "Password stored as plaintext",
+    description: "Passwords must be hashed with bcrypt, scrypt, or Argon2 before storage — never store plaintext",
+    severity: "critical",
+    category: "Cryptography",
+    cwe: ["CWE-326"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:INSERT|insert|save|store|create|update)[\s\S]{0,200}(?:password|passwd|pwd)\s*[:=]\s*(?:req\.|params\.|body\.|input\.|user\.)(?![\s\S]{0,100}(?:hash|bcrypt|scrypt|argon|pbkdf|encrypt))/, message: "Password may be stored without hashing" },
+      { pattern: /password\s*[:=]\s*(?:req\.body|params|input)[\s\S]{0,50}(?:\.save\(\)|\.create\(|\.insert\(|\.update\()/, message: "User password stored directly from request — hash first" },
+      { pattern: /(?:user|account)\.password\s*=\s*(?:req|request|params|body)\./, message: "Password assigned from request without hashing" },
+    ],
+  },
+  {
+    id: "CRYPTO-011",
+    name: "Weak PBKDF2 iterations",
+    description: "PBKDF2 with fewer than 100,000 iterations is too fast for password hashing — increases brute-force speed",
+    severity: "medium",
+    category: "Cryptography",
+    cwe: ["CWE-757"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /pbkdf2[\s\S]{0,100}(?:iterations?|rounds?|count)\s*[:=]\s*(\d{1,4})\b/, message: "PBKDF2 iteration count too low — use at least 100,000" },
+      { pattern: /PBKDF2[\s\S]{0,100}(?:iterations?|rounds?|count)\s*[:=]\s*(\d{1,4})\b/, message: "PBKDF2 iteration count too low — use at least 100,000" },
+      { pattern: /(?:pbkdf2|PBKDF2)(?:Sync|_hmac)?\(\s*[^,]+,\s*[^,]+,\s*(?:[1-9]\d{0,3}|[1-9]\d{4})\s*[,)]/, message: "PBKDF2 with fewer than 100,000 iterations" },
+    ],
+  },
+  {
+    id: "CRYPTO-012",
+    name: "DES/3DES usage",
+    description: "DES (56-bit) and 3DES (112-bit effective) are deprecated — use AES-128 or AES-256",
+    severity: "high",
+    category: "Cryptography",
+    cwe: ["CWE-327"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php", "**/*.c", "**/*.cpp"],
+    badPatterns: [
+      { pattern: /(?:Cipher\.getInstance|new Cipher|createCipher)\s*\(\s*["'](?:DES|DESede|3DES)/, message: "DES/3DES cipher usage — use AES instead" },
+      { pattern: /(?:TripleDES|DESede|TDEA)\s*[\.(]/, message: "Triple DES usage — deprecated, use AES" },
+      { pattern: /(?:Cipher|cipher|createCipher)[\s\S]{0,50}["'](?:des|des3|des-ede3?|des-cbc|des-ecb)["']/, message: "DES cipher algorithm specified — use AES" },
+      { pattern: /(?:EVP_des_|DES_set_key|DES_ecb_encrypt|DES_cbc_encrypt)/, message: "OpenSSL DES API call — use AES" },
+    ],
+  },
+];
+
+// ─── Session & Cookie Security ──────────────────────────────────
+
+export const sessionRules: Rule[] = [
+  {
+    id: "SESS-001",
+    name: "Cookie without Secure flag",
+    description: "Cookies without the Secure flag are sent over unencrypted HTTP, allowing interception via MITM",
+    severity: "high",
+    category: "Session & Cookie Security",
+    cwe: ["CWE-614"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /Set-Cookie\s*[:=](?![\s\S]{0,200}[Ss]ecure)/, message: "Set-Cookie header without Secure flag — cookie sent over HTTP" },
+      { pattern: /(?:res\.cookie|response\.set_cookie|setCookie|Cookie\.new)\([\s\S]{0,300}(?!secure\s*[:=]\s*true|Secure)[\s\S]{0,50}\)/, message: "Cookie set without Secure flag" },
+    ],
+  },
+  {
+    id: "SESS-002",
+    name: "Cookie without HttpOnly flag",
+    description: "Cookies without HttpOnly are accessible via JavaScript, enabling theft through XSS attacks",
+    severity: "high",
+    category: "Session & Cookie Security",
+    cwe: ["CWE-1004"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:res\.cookie|response\.set_cookie|setCookie)\([\s\S]{0,300}httpOnly\s*:\s*false/, message: "Cookie explicitly set with httpOnly: false — XSS cookie theft risk" },
+      { pattern: /Set-Cookie\s*[:=](?![\s\S]{0,200}[Hh]ttp[Oo]nly)/, message: "Set-Cookie header without HttpOnly flag" },
+    ],
+  },
+  {
+    id: "SESS-003",
+    name: "Cookie without SameSite attribute",
+    description: "Cookies without SameSite attribute are vulnerable to CSRF attacks in cross-site requests",
+    severity: "medium",
+    category: "Session & Cookie Security",
+    cwe: ["CWE-1275"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:res\.cookie|response\.set_cookie|setCookie)\([\s\S]{0,300}(?!sameSite|samesite|same_site)[\s\S]{0,50}\)/, message: "Cookie set without SameSite attribute — CSRF risk" },
+      { pattern: /sameSite\s*:\s*["'](?:none|None)["'](?![\s\S]{0,100}[Ss]ecure)/, message: "SameSite=None without Secure flag — cookie will be rejected by modern browsers" },
+    ],
+  },
+  {
+    id: "SESS-004",
+    name: "Session fixation — no regeneration after login",
+    description: "Session ID must be regenerated after authentication to prevent session fixation attacks",
+    severity: "high",
+    category: "Session & Cookie Security",
+    cwe: ["CWE-613"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:login|authenticate|signIn|sign_in)\s*(?:=|:)\s*(?:async\s*)?\(?[\s\S]{0,800}(?:session\[|req\.session\.)(?![\s\S]{0,300}(?:regenerate|rotate|destroy|reset))/, message: "Session not regenerated after login — session fixation risk" },
+    ],
+  },
+  {
+    id: "SESS-005",
+    name: "Session token stored in localStorage",
+    description: "localStorage is accessible to any JavaScript on the page — XSS can steal session tokens",
+    severity: "high",
+    category: "Session & Cookie Security",
+    cwe: ["CWE-384"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /localStorage\.setItem\(\s*["'](?:session[Tt]oken|auth[Tt]oken|access[Tt]oken|jwt|JWT|token|id_token|refresh_token)["']/, message: "Session/auth token stored in localStorage — use httpOnly cookies instead" },
+      { pattern: /localStorage\[["'](?:session[Tt]oken|auth[Tt]oken|access[Tt]oken|jwt|token)["']\]\s*=/, message: "Token stored in localStorage — XSS can steal it" },
+    ],
+  },
+  {
+    id: "SESS-006",
+    name: "Long session timeout",
+    description: "Session maxAge over 24 hours increases the window for session hijacking attacks",
+    severity: "medium",
+    category: "Session & Cookie Security",
+    cwe: ["CWE-523"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /maxAge\s*:\s*(?:8640000[1-9]|86[5-9]\d{5}|8[7-9]\d{6}|[9]\d{7}|\d{9,})/, message: "Session maxAge exceeds 24 hours (86400000ms) — long session window" },
+      { pattern: /(?:session|cookie)[\s\S]{0,100}(?:expires|expiry|ttl|max_age)\s*[:=]\s*(?:\d+\s*\*\s*)?(?:7|14|30|60|90|365)\s*\*\s*(?:24|86400)/, message: "Session expiry set to multiple days — consider shorter session lifetime" },
+    ],
+  },
+  {
+    id: "SESS-007",
+    name: "Session ID in URL",
+    description: "Session IDs in URL query parameters are logged in server logs, browser history, and Referer headers",
+    severity: "critical",
+    category: "Session & Cookie Security",
+    cwe: ["CWE-598"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:redirect|navigate|href|window\.location|url)\s*[:=][\s\S]{0,100}[?&](?:session[_-]?id|auth[_-]?token|access[_-]?token|jwt|sid)=\s*(?:\$\{|` ?\+|encodeURI)/, message: "Token appended to URL — session ID leaks via Referer header" },
+    ],
+  },
+  {
+    id: "SESS-008",
+    name: "Missing session invalidation on logout",
+    description: "Logout must destroy the server-side session — clearing cookies alone leaves the session valid",
+    severity: "high",
+    category: "Session & Cookie Security",
+    cwe: ["CWE-613"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:logout|sign_?out|log_?out)\s*(?:=|:)\s*(?:async\s*)?\(?[\s\S]{0,500}(?:res\.clearCookie|delete.*cookie|response\.delete_cookie)(?![\s\S]{0,300}(?:session\.destroy|req\.session\.destroy|session\.invalidate|session\.flush|session\.clear))/, message: "Logout clears cookie but may not destroy server-side session" },
+      { pattern: /(?:logout|sign_?out|log_?out)\s*(?:=|:)\s*(?:async\s*)?\(?[\s\S]{0,500}(?:res\.redirect|res\.send|res\.json)(?![\s\S]{0,300}(?:session\.destroy|req\.session\.destroy|session\.invalidate))/, message: "Logout handler without session.destroy — session remains valid" },
+    ],
+  },
+];
+
+// ─── Error Handling & Logging ───────────────────────────────────
+
+export const errorHandlingRules: Rule[] = [
+  {
+    id: "ERR-001",
+    name: "Stack trace exposed to user",
+    description: "Sending error.stack in HTTP responses reveals internal code paths, file structure, and dependencies to attackers",
+    severity: "high",
+    category: "Error Handling & Logging",
+    cwe: ["CWE-209"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:res\.(?:json|send|write|status)|response\.(?:json|send|write))\([\s\S]{0,200}(?:error\.stack|err\.stack|e\.stack|\.stackTrace|\.stack_trace)/, message: "Error stack trace sent in HTTP response — leaks internal paths" },
+      { pattern: /(?:json|send|render)\([\s\S]{0,100}stack\s*:\s*(?:error|err|e)\.stack/, message: "Stack trace included in response body" },
+    ],
+  },
+  {
+    id: "ERR-002",
+    name: "Bare except swallows all exceptions",
+    description: "Bare except catches SystemExit and KeyboardInterrupt, masking critical failures",
+    severity: "medium",
+    category: "Error Handling & Logging",
+    cwe: ["CWE-754"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /\bexcept\s*:\s*\n\s*pass\b/, message: "Python bare except:pass — catches SystemExit/KeyboardInterrupt, masks all errors" },
+      { pattern: /\bexcept\s+Exception\s*:\s*\n\s*pass\b/, message: "except Exception:pass — silently swallows all runtime errors" },
+    ],
+  },
+  {
+    id: "ERR-003",
+    name: "Sensitive data in error message",
+    description: "Including passwords, keys, or tokens in error messages can leak them to logs or end users",
+    severity: "high",
+    category: "Error Handling & Logging",
+    cwe: ["CWE-209"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:throw new|raise|Error|Exception)\([\s\S]{0,100}(?:\$\{.*(?:password|secret|apiKey|token)\}|"\s*\+\s*(?:password|secret|apiKey|token))/, message: "Sensitive data interpolated in error/exception message" },
+      { pattern: /(?:error|err|Error)\(\s*[`"'].*(?:\$\{.*(?:password|secret|key|token)\}|%s.*(?:password|secret|key|token))/, message: "Sensitive value interpolated into error message" },
+    ],
+  },
+  {
+    id: "ERR-004",
+    name: "Missing global error handler",
+    description: "Without a global error handler, unhandled errors crash the process or leak stack traces to clients",
+    severity: "medium",
+    category: "Error Handling & Logging",
+    cwe: ["CWE-209"],
+    filePatterns: ["**/server.ts", "**/server.js", "**/app.ts", "**/app.js", "**/app.py", "**/main.go", "**/application.rb", "**/index.php"],
+    requiredPatterns: [
+      { pattern: /(?:app\.use\(\s*(?:function\s*)?\(\s*err|process\.on\(\s*["']uncaughtException|process\.on\(\s*["']unhandledRejection|@app\.errorhandler|@ExceptionHandler|rescue_from|set_exception_handler)/, message: "No global error handler found — unhandled errors may crash process or leak stack traces", filePattern: "**/*{app,server,main,index}*" },
+    ],
+  },
+  {
+    id: "ERR-005",
+    name: "Console.log with sensitive data in production",
+    description: "console.log statements with sensitive data persist in production logs and can be harvested",
+    severity: "low",
+    category: "Error Handling & Logging",
+    cwe: ["CWE-209"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /console\.log\([\s\S]{0,200}(?:password|passwd|secret|private[_-]?key|api[_-]?key|token|credential|authorization)/, message: "console.log with sensitive data — remove before production" },
+      { pattern: /print\([\s\S]{0,200}(?:password|passwd|secret|private[_-]?key|api[_-]?key|token|credential)/, message: "print() with sensitive data — remove before production" },
+    ],
+  },
+  {
+    id: "ERR-006",
+    name: "Unhandled promise rejection",
+    description: "Async functions and promises without error handling cause unhandled rejections that crash Node.js",
+    severity: "medium",
+    category: "Error Handling & Logging",
+    cwe: ["CWE-755"],
+    filePatterns: ["**/*.ts", "**/*.js"],
+    requiredPatterns: [
+      { pattern: /process\.on\(\s*["']unhandledRejection/, message: "No global unhandledRejection handler — unhandled promises will crash Node.js", filePattern: "**/*{index,server,app,main}*" },
+    ],
+  },
+  {
+    id: "ERR-007",
+    name: "Debug mode enabled in production config",
+    description: "Debug mode exposes verbose errors, internal state, and often disables security features",
+    severity: "high",
+    category: "Error Handling & Logging",
+    cwe: ["CWE-489"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:app|server|config|settings)[\s\S]{0,50}(?:debug|DEBUG)\s*[:=]\s*(?:true|True|1|["']true["'])/, message: "Debug mode enabled in config — disable in production" },
+      { pattern: /(?:NODE_ENV|FLASK_ENV|FLASK_DEBUG|RAILS_ENV|DJANGO_DEBUG|DJANGO_SETTINGS)\s*[:=]\s*(?:true|True|1|["'](?:development|dev|true)["'])/, message: "Development environment setting — ensure production uses correct value" },
+      { pattern: /app\.(?:debug|DEBUG)\s*=\s*True/, message: "Application debug mode enabled — exposes internal errors to users" },
+    ],
+  },
+  {
+    id: "ERR-008",
+    name: "Detailed database errors exposed to client",
+    description: "Sending raw SQL or ORM errors to clients reveals database schema, table names, and query structure",
+    severity: "high",
+    category: "Error Handling & Logging",
+    cwe: ["CWE-209"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:res\.(?:json|send|status)|response\.(?:json|send))\([\s\S]{0,200}(?:sql|SQL|query|sequelize|prisma|typeorm|mongoose|knex|sqlalchemy)[\s\S]{0,100}(?:error|err|message)/, message: "Database error details sent in HTTP response — reveals schema to attackers" },
+      { pattern: /catch\s*\(\s*(\w+)\s*\)\s*\{[\s\S]{0,200}(?:res\.(?:json|send)|response\.(?:json|send))\([\s\S]{0,50}\1\.message/, message: "Raw database exception message sent to client" },
+    ],
+  },
+];
+
+// ─── Network Security ───────────────────────────────────────────
+
+export const networkSecurityRules: Rule[] = [
+  {
+    id: "NETSEC-001",
+    name: "HTTP instead of HTTPS for API calls",
+    description: "Using plain HTTP for API calls exposes data in transit to interception and tampering",
+    severity: "high",
+    category: "Network Security",
+    cwe: ["CWE-297"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:fetch|axios|request|got|http\.Get|requests\.get|HttpClient\.newHttpClient|urllib)\(\s*["']http:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|::1)/, message: "HTTP (not HTTPS) used for API call — data exposed in transit" },
+      { pattern: /(?:api[_-]?url|API_URL|baseURL|base_url|endpoint)\s*[:=]\s*["']http:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/, message: "API base URL uses HTTP instead of HTTPS" },
+    ],
+  },
+  {
+    id: "NETSEC-002",
+    name: "DNS rebinding — no Host header validation",
+    description: "Without Host header validation, DNS rebinding attacks can bypass same-origin restrictions",
+    severity: "medium",
+    category: "Network Security",
+    cwe: ["CWE-319"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:createServer|http\.Server|express)\(\)[\s\S]{0,500}\.listen\(\s*\d+(?![\s\S]{0,1000}(?:host|Host|allowed[_-]?hosts|ALLOWED_HOSTS|helmet))/, message: "HTTP server without Host header validation — DNS rebinding risk" },
+    ],
+  },
+  {
+    id: "NETSEC-003",
+    name: "WebSocket without authentication",
+    description: "WebSocket connections without authentication allow unauthorized access to real-time data",
+    severity: "high",
+    category: "Network Security",
+    cwe: ["CWE-757"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:new\s+WebSocketServer|new\s+WebSocket\.Server|websocket\.serve|ws\.createServer)\([\s\S]{0,500}(?:on\(\s*["']connection["']|on_open|on_connect)[\s\S]{0,500}(?!(?:auth|token|verify|jwt|session|cookie|authenticate))/, message: "WebSocket server accepts connections without authentication check" },
+      { pattern: /wss?\.\s*on\(\s*["']connection["']\s*,\s*(?:function\s*)?\(\s*\w+\s*\)\s*(?:=>)?\s*\{(?![\s\S]{0,300}(?:auth|token|verify|jwt|session))/, message: "WebSocket connection handler without authentication" },
+    ],
+  },
+  {
+    id: "NETSEC-004",
+    name: "Missing TLS certificate pinning",
+    description: "Without certificate pinning, MITM attacks with rogue certificates can intercept traffic",
+    severity: "medium",
+    category: "Network Security",
+    cwe: ["CWE-693"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /rejectUnauthorized\s*:\s*false/, message: "TLS certificate validation disabled — MITM risk" },
+      { pattern: /verify\s*[:=]\s*false[\s\S]{0,100}(?:https|ssl|tls|request|fetch)/, message: "SSL/TLS verification disabled — accepts any certificate" },
+      { pattern: /NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0/, message: "Node.js TLS rejection disabled globally — all HTTPS connections are insecure" },
+      { pattern: /CERT_NONE|verify_mode\s*=\s*ssl\.CERT_NONE/, message: "Python SSL certificate verification disabled" },
+    ],
+  },
+  {
+    id: "NETSEC-005",
+    name: "Proxy trust misconfiguration",
+    description: "Trusting proxy headers without proper configuration allows IP spoofing and authentication bypass",
+    severity: "medium",
+    category: "Network Security",
+    cwe: ["CWE-942"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:trust\s*proxy|TRUST_PROXY)\s*[:=]\s*true/, message: "Express trust proxy set to true — trusts all X-Forwarded-For headers, specify trusted proxies instead" },
+      { pattern: /app\.set\(\s*["']trust proxy["']\s*,\s*true\s*\)/, message: "Express trusts all proxies — use specific proxy IPs or loopback" },
+    ],
+  },
+  {
+    id: "NETSEC-006",
+    name: "Insecure WebSocket (ws:// instead of wss://)",
+    description: "Unencrypted WebSocket connections expose real-time data to interception",
+    severity: "high",
+    category: "Network Security",
+    cwe: ["CWE-350"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /new\s+WebSocket\(\s*["']ws:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/, message: "Insecure WebSocket (ws://) — use wss:// for encrypted connection" },
+      { pattern: /(?:ws[_-]?url|WS_URL|websocket[_-]?url|socket[_-]?url)\s*[:=]\s*["']ws:\/\/(?!localhost|127\.0\.0\.1)/, message: "WebSocket URL uses ws:// instead of wss://" },
+    ],
+  },
+  {
+    id: "NETSEC-007",
+    name: "Missing request timeout",
+    description: "HTTP clients without timeout can hang indefinitely, causing resource exhaustion and DoS",
+    severity: "medium",
+    category: "Network Security",
+    cwe: ["CWE-319"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /axios\.(?:get|post|put|delete|patch)\s*\(\s*["'`]https?:[\s\S]{0,300}(?!\btimeout\b)/, message: "Axios request without timeout — may hang indefinitely" },
+      { pattern: /\bfetch\s*\(\s*["'`]https?:[\s\S]{0,300}(?!timeout|signal|AbortController)/, message: "fetch() without timeout configuration" },
+      { pattern: /requests\.(?:get|post|put|delete)\([\s\S]{0,300}(?!\btimeout\b)[\s\S]{0,50}\)/, message: "Python requests without timeout — may block indefinitely" },
+    ],
+  },
+  {
+    id: "NETSEC-008",
+    name: "SMTP credentials hardcoded",
+    description: "Hardcoded email credentials in source code allow unauthorized email sending and account compromise",
+    severity: "critical",
+    category: "Network Security",
+    cwe: ["CWE-693"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:smtp|SMTP|mail|email)[\s\S]{0,200}(?:password|pass|auth)\s*[:=]\s*["'][^"']{4,}["']/, message: "SMTP/email password hardcoded in source" },
+      { pattern: /(?:createTransport|nodemailer|smtplib|SMTP)\([\s\S]{0,300}(?:pass|password|auth)\s*[:=]\s*["'][^"']{4,}["']/, message: "Email transport credentials hardcoded" },
+    ],
+  },
+];
+
+// ─── Configuration Security ─────────────────────────────────────
+
+export const configSecurityRules: Rule[] = [
+  {
+    id: "CFG-001",
+    name: "Debug mode in production",
+    description: "Debug mode in production exposes internal state, disables security features, and degrades performance",
+    severity: "high",
+    category: "Configuration Security",
+    cwe: ["CWE-16"],
+    filePatterns: ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.env", "**/*.conf"],
+    badPatterns: [
+      { pattern: /(?:DEBUG|debug)\s*[:=]\s*(?:true|True|1|["']true["']\s*$)/, message: "Debug mode enabled in config — must be disabled in production" },
+      { pattern: /NODE_ENV\s*=\s*(?:development|dev)\b/, message: "NODE_ENV set to development in config file" },
+    ],
+  },
+  {
+    id: "CFG-002",
+    name: "Default admin credentials",
+    description: "Default credentials are the first thing attackers try — automated scanners check for admin/admin within seconds",
+    severity: "critical",
+    category: "Configuration Security",
+    cwe: ["CWE-16"],
+    filePatterns: ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.env", "**/*.conf"],
+    badPatterns: [
+      { pattern: /(?:admin[_-]?password|ADMIN_PASSWORD|default[_-]?password|DEFAULT_PASSWORD)\s*[:=]\s*["'](?:admin|password|123456|root|default|changeme|test)["']/, message: "Default admin password found — change immediately" },
+      { pattern: /(?:username|user)\s*[:=]\s*["']admin["'][\s\S]{0,100}(?:password|pass)\s*[:=]\s*["'](?:admin|password|root|123456)["']/, message: "Default admin/admin credentials found" },
+      { pattern: /(?:password|pass|passwd)\s*[:=]\s*["'](?:password|123456|admin|root|default|changeme|qwerty|letmein)["']/, message: "Common default password found in config" },
+    ],
+  },
+  {
+    id: "CFG-003",
+    name: "Exposed .env file",
+    description: ".env files contain secrets and must not be in public directories, git, or served by web servers",
+    severity: "critical",
+    category: "Configuration Security",
+    cwe: ["CWE-16"],
+    filePatterns: ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.env", "**/*.conf"],
+    badPatterns: [
+      { pattern: /\.env(?:\.\w+)?\s*(?:$|#)[\s\S]*(?:API_KEY|SECRET|PASSWORD|TOKEN|PRIVATE_KEY)\s*=/, message: ".env file contains secrets — ensure it is in .gitignore and not served publicly" },
+    ],
+  },
+  {
+    id: "CFG-004",
+    name: "Insecure CORS configuration",
+    description: "Reflecting origin or using wildcard CORS allows any website to make authenticated requests to your API",
+    severity: "high",
+    category: "Configuration Security",
+    cwe: ["CWE-16"],
+    filePatterns: ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.env", "**/*.conf"],
+    badPatterns: [
+      { pattern: /(?:cors|CORS|access[_-]control[_-]allow[_-]origin)\s*[:=]\s*["']\*["']/, message: "CORS allows wildcard origin — any site can make requests" },
+      { pattern: /(?:cors|CORS)[\s\S]{0,200}(?:origin\s*[:=]\s*true|reflect|credentials\s*[:=]\s*true[\s\S]{0,100}origin\s*[:=]\s*["']\*)/, message: "CORS reflects origin or allows credentials with wildcard — severe misconfiguration" },
+    ],
+  },
+  {
+    id: "CFG-005",
+    name: "Missing security headers",
+    description: "Missing X-Frame-Options, CSP, X-Content-Type-Options headers leave the application vulnerable to clickjacking, XSS, and MIME sniffing",
+    severity: "medium",
+    category: "Configuration Security",
+    cwe: ["CWE-693"],
+    filePatterns: ["**/nginx.conf", "**/apache.conf", "**/.htaccess", "**/server.json", "**/server.yml", "**/server.yaml"],
+    requiredPatterns: [
+      { pattern: /(?:X-Frame-Options|x-frame-options|DENY|SAMEORIGIN|frame-ancestors|Content-Security-Policy|helmet)/i, message: "No security headers configuration found — add X-Frame-Options, CSP, X-Content-Type-Options", filePattern: "**/*{config,server,app,security,nginx,apache}*" },
+    ],
+  },
+  {
+    id: "CFG-006",
+    name: "Source maps served in production",
+    description: "Source maps expose original source code, making it trivial to find vulnerabilities",
+    severity: "medium",
+    category: "Configuration Security",
+    cwe: ["CWE-540"],
+    filePatterns: ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.env", "**/*.conf"],
+    badPatterns: [
+      { pattern: /(?:sourceMap|source[_-]?map|devtool)\s*[:=]\s*(?:true|["'](?:source-map|eval-source-map|inline-source-map|cheap-module-source-map)["'])/, message: "Source maps enabled — disable in production to prevent source code exposure" },
+      { pattern: /(?:productionSourceMap|GENERATE_SOURCEMAP)\s*[:=]\s*true/, message: "Source maps generated for production build" },
+    ],
+  },
+  {
+    id: "CFG-007",
+    name: "Exposed admin panel without authentication",
+    description: "Admin routes accessible without authentication allow unauthorized administrative access",
+    severity: "medium",
+    category: "Configuration Security",
+    cwe: ["CWE-306"],
+    filePatterns: ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.env", "**/*.conf"],
+    badPatterns: [
+      { pattern: /(?:admin[_-]?path|ADMIN_PATH|admin[_-]?url)\s*[:=]\s*["']\/(?:admin|dashboard|manage|panel)["']/, message: "Admin panel path configured — ensure authentication middleware is applied" },
+      { pattern: /(?:location|path)\s+(?:\/admin|\/dashboard|\/manage)[\s\S]{0,200}(?!auth|login|deny|restrict)/, message: "Admin route in config without visible auth restriction" },
+    ],
+  },
+  {
+    id: "CFG-008",
+    name: "Verbose server banner enabled",
+    description: "Server version headers help attackers identify specific vulnerabilities for your server software",
+    severity: "low",
+    category: "Configuration Security",
+    cwe: ["CWE-200"],
+    filePatterns: ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.env", "**/*.conf"],
+    badPatterns: [
+      { pattern: /(?:x[_-]powered[_-]by|X-Powered-By|server_tokens)\s*[:=]\s*(?:true|on|["']Express["']|["']PHP)/, message: "Server version header enabled — disable x-powered-by to reduce fingerprinting" },
+      { pattern: /server_tokens\s+on/, message: "Nginx server_tokens on — exposes version number" },
+      { pattern: /ServerTokens\s+(?:Full|OS|Major|Minor|Minimal)/, message: "Apache ServerTokens exposing version info — use Prod" },
+    ],
+  },
+];
+
+// ─── File & Path Security ───────────────────────────────────────
+
+export const fileSecurityRules: Rule[] = [
+  {
+    id: "FILE-001",
+    name: "Path traversal vulnerability",
+    description: "User input in file paths without sanitization allows reading or writing arbitrary files via ../ sequences",
+    severity: "critical",
+    category: "File & Path Security",
+    cwe: ["CWE-22"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:path\.join|path\.resolve)\(\s*(?:req\.|params\.|query\.|body\.|input|user)/, message: "path.join/resolve with user input — path traversal risk" },
+      { pattern: /(?:readFile|readFileSync|createReadStream)\(\s*(?:req\.|params\.|query\.|body\.|input|user)/, message: "File read with user-controlled path — path traversal risk" },
+      { pattern: /os\.path\.join\(\s*\w+\s*,\s*(?:request\.|args\.|kwargs|input)/, message: "Python os.path.join with user input — path traversal risk" },
+      { pattern: /(?:readFile|writeFile|open|fopen)\(.*\.\.\/.*(?:req\.|params\.|query\.|body\.)/, message: "Relative path traversal pattern with user input in file operation" },
+      { pattern: /filepath\.Join\(\s*\w+\s*,\s*(?:r\.|req\.|params\.|c\.)/, message: "Go filepath.Join with user input — path traversal risk" },
+    ],
+  },
+  {
+    id: "FILE-002",
+    name: "Arbitrary file read",
+    description: "Reading files with user-controlled paths allows attackers to access sensitive files like /etc/passwd or config files",
+    severity: "high",
+    category: "File & Path Security",
+    cwe: ["CWE-22"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /fs\.readFile(?:Sync)?\(\s*`\$\{/, message: "fs.readFile with template literal path — potential arbitrary file read" },
+      { pattern: /fs\.readFile(?:Sync)?\(\s*\w+\s*\+/, message: "fs.readFile with concatenated path — potential arbitrary file read" },
+      { pattern: /open\(\s*(?:request\.|args\.|kwargs\[|params\[|input).*["']r/, message: "Python file open with user-controlled path" },
+      { pattern: /File\.read\(\s*(?:params|request)/, message: "Ruby File.read with user-controlled path" },
+      { pattern: /new\s+File\(\s*(?:request\.getParameter|req\.)/, message: "Java File with user-controlled path" },
+    ],
+  },
+  {
+    id: "FILE-003",
+    name: "Arbitrary file write",
+    description: "Writing files with user-controlled paths allows attackers to overwrite critical files or plant webshells",
+    severity: "high",
+    category: "File & Path Security",
+    cwe: ["CWE-22"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /fs\.writeFile(?:Sync)?\(\s*`\$\{/, message: "fs.writeFile with template literal path — potential arbitrary file write" },
+      { pattern: /fs\.writeFile(?:Sync)?\(\s*\w+\s*\+/, message: "fs.writeFile with concatenated path — potential arbitrary file write" },
+      { pattern: /open\(\s*(?:request\.|args\.|kwargs\[|params\[|input).*["']w/, message: "Python file open for write with user-controlled path" },
+      { pattern: /File\.write\(\s*(?:params|request)/, message: "Ruby File.write with user-controlled path" },
+      { pattern: /FileOutputStream\(\s*(?:request\.getParameter|req\.)/, message: "Java FileOutputStream with user-controlled path" },
+    ],
+  },
+  {
+    id: "FILE-004",
+    name: "Temporary file with predictable name",
+    description: "Using static filenames in /tmp allows symlink attacks and race conditions",
+    severity: "medium",
+    category: "File & Path Security",
+    cwe: ["CWE-434"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /["']\/tmp\/[a-zA-Z_\-]+\.[a-zA-Z]+["']/, message: "Static filename in /tmp — predictable temp file" },
+      { pattern: /["']\/tmp\/[a-zA-Z_\-]+["']/, message: "Static filename in /tmp — predictable temp file" },
+      { pattern: /tempfile\s*=\s*["']\/tmp\//, message: "Hardcoded temp file path — use mkstemp or tempfile module" },
+      { pattern: /os\.path\.join\(\s*["']\/tmp["']\s*,\s*["'][^"']+["']\)/, message: "Python static temp file path — use tempfile.mkstemp()" },
+    ],
+  },
+  {
+    id: "FILE-005",
+    name: "Symlink race condition",
+    description: "File operations without O_NOFOLLOW or symlink checks can be exploited via TOCTOU race conditions",
+    severity: "medium",
+    category: "File & Path Security",
+    cwe: ["CWE-377"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /fs\.(?:exists|stat)(?:Sync)?\([\s\S]{0,100}fs\.(?:readFile|writeFile|unlink)/, message: "Check-then-act on file — TOCTOU race condition with symlinks" },
+      { pattern: /os\.path\.exists\([\s\S]{0,100}open\(/, message: "Python check-then-open — TOCTOU symlink race condition" },
+      { pattern: /os\.path\.isfile\([\s\S]{0,100}os\.(?:remove|unlink)\(/, message: "Python check-then-delete — TOCTOU symlink race condition" },
+      { pattern: /File\.exists\?\([\s\S]{0,100}File\.(?:read|write|delete)\(/, message: "Ruby check-then-act — TOCTOU symlink race condition" },
+    ],
+  },
+  {
+    id: "FILE-006",
+    name: "World-writable file permissions",
+    description: "Setting chmod 777 or 0o777 allows any user on the system to read, write, and execute the file",
+    severity: "high",
+    category: "File & Path Security",
+    cwe: ["CWE-276"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /chmod\s*\(\s*(?:["'][^"']*["']\s*,\s*)?(?:0o?777|0?777|["']777["'])/, message: "chmod 777 — world-writable file permissions" },
+      { pattern: /os\.chmod\(\s*\w+\s*,\s*0o?777\)/, message: "Python os.chmod 777 — world-writable file permissions" },
+      { pattern: /\.setWritable\(\s*true\s*,\s*false\s*\)/, message: "Java setWritable for all users — world-writable permissions" },
+      { pattern: /fs\.chmod(?:Sync)?\(\s*\w+\s*,\s*0o?777\)/, message: "Node.js chmod 777 — world-writable file permissions" },
+    ],
+  },
+  {
+    id: "FILE-007",
+    name: "Directory listing enabled",
+    description: "Exposing directory listings allows attackers to discover hidden files and application structure",
+    severity: "medium",
+    category: "File & Path Security",
+    cwe: ["CWE-73"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /express\.static\(\s*["'][^"']+["']\s*\)(?![\s\S]{0,50}index\s*:\s*false)/, message: "express.static without index:false — directory listing may be enabled" },
+      { pattern: /autoindex\s+on/, message: "Nginx autoindex on — directory listing enabled" },
+      { pattern: /Options\s+\+?Indexes/, message: "Apache Options +Indexes — directory listing enabled" },
+      { pattern: /directory_listing\s*[:=]\s*(?:true|True|1)/, message: "Directory listing explicitly enabled" },
+    ],
+  },
+  {
+    id: "FILE-008",
+    name: "File upload without type validation",
+    description: "Accepting file uploads without MIME type or extension validation allows uploading malicious files",
+    severity: "high",
+    category: "File & Path Security",
+    cwe: ["CWE-434"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /multer\(\s*\{[\s\S]{0,200}\}\s*\)(?![\s\S]{0,300}(?:fileFilter|mimetype|extension))/, message: "Multer upload without fileFilter — no type validation" },
+      { pattern: /\.upload\([\s\S]{0,200}(?!(?:content_type|mimetype|allowed_extensions|file_type))/, message: "File upload handler without type validation" },
+      { pattern: /req\.files?\.\w+\.mv\(/, message: "express-fileupload move without type check" },
+      { pattern: /request\.files\[[\s\S]{0,100}\.save\((?![\s\S]{0,200}(?:content_type|allowed|validate))/, message: "Python file upload save without type validation" },
+    ],
+  },
+  {
+    id: "FILE-009",
+    name: "Zip slip vulnerability",
+    description: "Extracting archive entries without validating paths allows writing files outside the target directory",
+    severity: "high",
+    category: "File & Path Security",
+    cwe: ["CWE-22"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /\.extractAll\((?![\s\S]{0,200}(?:sanitize|validate|startsWith|normalize))/, message: "Archive extraction without path validation — zip slip risk" },
+      { pattern: /ZipEntry[\s\S]{0,200}getName\(\)[\s\S]{0,200}(?:new File|FileOutputStream)(?![\s\S]{0,200}(?:startsWith|canonical|normalize))/, message: "Java ZipEntry path used without validation — zip slip risk" },
+      { pattern: /zipfile\.extract(?:all)?\((?![\s\S]{0,200}(?:member|sanitize|validate))/, message: "Python zipfile extraction without member validation — zip slip risk" },
+      { pattern: /tar\.extractall\((?![\s\S]{0,200}(?:filter|members|sanitize))/, message: "Python tar.extractall without filter — zip slip / path traversal risk" },
+    ],
+  },
+  {
+    id: "FILE-010",
+    name: "Log injection",
+    description: "User input directly in log messages without sanitization allows log forging and CRLF injection",
+    severity: "medium",
+    category: "File & Path Security",
+    cwe: ["CWE-117"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:console\.log|logger\.(?:info|warn|error|debug))\(\s*`[^`]*\$\{(?:req\.|params\.|query\.|body\.|input|user)/, message: "User input in log template literal — log injection risk" },
+      { pattern: /(?:console\.log|logger\.(?:info|warn|error|debug))\(\s*(?:req\.|params\.|query\.|body\.)/, message: "User input directly in log call — log injection risk" },
+      { pattern: /logging\.(?:info|warn|error|debug)\(\s*f?["'].*(?:request\.|args\.|kwargs|input)/, message: "Python user input in log — log injection risk" },
+      { pattern: /log\.(?:Info|Warn|Error|Debug)f?\(.*(?:req\.|request\.|r\.\w+\.(?:URL|Body|Header|Form))/, message: "Go log with HTTP request data — log injection risk" },
+    ],
+  },
+];
+
+// ─── Privacy & Data Protection ──────────────────────────────────
+
+export const privacyRules: Rule[] = [
+  {
+    id: "PRIV-001",
+    name: "PII in logs",
+    description: "Logging personally identifiable information (email, SSN, phone, credit card) violates privacy regulations",
+    severity: "high",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-359"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:console\.log|logger\.(?:info|warn|error|debug)|Log\.[diwev])\(.*(?:\$\{|,\s*|\+\s*)(?:email[Aa]ddress|ssn|socialSecurity|social_security|creditCard|credit_card|phoneNumber|phone_number)\b/, message: "Logging PII data (email/SSN/phone/credit card)" },
+      { pattern: /(?:logging|log)\.(?:info|warn|error|debug)\(.*(?:\$\{|,\s*|\+\s*)(?:email[Aa]ddress|ssn|social_security|credit_card|phone_number)\b/, message: "Logging PII data" },
+      { pattern: /(?:console\.log|logger)\(.*\b\d{3}-\d{2}-\d{4}\b/, message: "Logging what appears to be an SSN pattern" },
+    ],
+  },
+  {
+    id: "PRIV-002",
+    name: "Missing data encryption at rest",
+    description: "Storing sensitive data (passwords, tokens, PII) unencrypted in databases or files violates security best practices",
+    severity: "medium",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-359"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /\.(?:save|insert|create|update)\(\s*\{[\s\S]{0,300}(?:password|ssn|creditCard|credit_card|socialSecurity)\s*:\s*(?:req\.|params\.|body\.|input|user)(?![\s\S]{0,100}(?:encrypt|hash|bcrypt|argon|scrypt))/, message: "Storing sensitive field without encryption or hashing" },
+      { pattern: /localStorage\.setItem\(\s*["'](?:password|token|secret|ssn|credit)/, message: "Storing sensitive data in localStorage without encryption" },
+      { pattern: /SharedPreferences[\s\S]{0,200}\.putString\(\s*["'](?:password|token|secret|pin)/, message: "Android SharedPreferences storing sensitive data unencrypted" },
+    ],
+  },
+  {
+    id: "PRIV-003",
+    name: "Tracking without consent",
+    description: "Initializing analytics or tracking libraries without checking user consent violates GDPR/CCPA",
+    severity: "medium",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-359"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:gtag|ga|analytics|mixpanel|amplitude|segment|posthog)\.(?:init|initialize|track|identify|page)\((?![\s\S]{0,200}(?:consent|gdpr|optIn|opt_in|hasConsent|cookieConsent))/, message: "Analytics initialized without consent check" },
+      { pattern: /(?:FacebookSdk|FirebaseAnalytics|Crashlytics)\.(?:init|getInstance|setAnalytics)\((?![\s\S]{0,200}(?:consent|optIn|opt_in|permission))/, message: "Tracking SDK initialized without consent check" },
+    ],
+  },
+  {
+    id: "PRIV-004",
+    name: "Hardcoded PII in source",
+    description: "Email addresses, phone numbers, or other PII hardcoded in source code may leak to version control",
+    severity: "medium",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-359"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /["'][a-zA-Z0-9._%+\-]+@(?:gmail|yahoo|hotmail|outlook|protonmail)\.[a-z]{2,}["']/, message: "Hardcoded personal email address in source code" },
+      { pattern: /(?:phone|tel|mobile|cell|sms|whatsapp|contact)\w*\s*[:=]\s*["']\+?1?\s*\(?[2-9]\d{2}\)?[\s\-.]?[2-9]\d{2}[\s\-.]?\d{4}["']/i, message: "Hardcoded phone number in source code" },
+      { pattern: /["']\d{3}-\d{2}-\d{4}["']/, message: "Hardcoded SSN pattern in source code" },
+    ],
+  },
+  {
+    id: "PRIV-005",
+    name: "Missing data retention policy",
+    description: "Stored user data without TTL or expiry violates data minimization principles",
+    severity: "low",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-359"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /\.(?:insertOne|insertMany|create|save)\(\s*\{[\s\S]{0,500}(?:userData|userProfile|personalData|pii)(?![\s\S]{0,200}(?:ttl|expir|retention|deleteAt|expiresAt|createdAt))/, message: "Storing user data without TTL or expiry field" },
+      { pattern: /CREATE\s+TABLE[\s\S]{0,50}(?:users|user_profiles|personal_data)(?![\s\S]{0,300}(?:expir|ttl|retention|deleted_at|expires_at))/i, message: "User data table without expiry/retention column" },
+    ],
+  },
+  {
+    id: "PRIV-006",
+    name: "Geolocation without permission",
+    description: "Accessing device location without checking permission status first violates user privacy",
+    severity: "medium",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-200"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /navigator\.geolocation\.(?:getCurrentPosition|watchPosition)\((?![\s\S]{0,200}(?:permission|consent|allow|granted))/, message: "Geolocation access without permission check" },
+      { pattern: /LocationManager\.getLastKnownLocation\((?![\s\S]{0,200}(?:checkPermission|requestPermission|ACCESS_FINE_LOCATION))/, message: "Android location access without permission check" },
+      { pattern: /CLLocationManager\(\)[\s\S]{0,200}startUpdatingLocation\((?![\s\S]{0,200}(?:authorizationStatus|requestWhenInUse|requestAlways))/, message: "iOS location access without authorization check" },
+    ],
+  },
+  {
+    id: "PRIV-007",
+    name: "Clipboard access without notice",
+    description: "Reading clipboard contents without user-initiated action violates user privacy expectations",
+    severity: "medium",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-200"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /navigator\.clipboard\.readText\(\)(?![\s\S]{0,200}(?:userAction|onClick|onPaste|event))/, message: "Clipboard read without apparent user action" },
+      { pattern: /CLIPBOARD_SERVICE[\s\S]{0,100}getPrimaryClip\(\)/, message: "Android clipboard read without user action" },
+      { pattern: /UIPasteboard\.general\.string(?![\s\S]{0,200}(?:userAction|paste|event))/, message: "iOS clipboard read without user action" },
+    ],
+  },
+  {
+    id: "PRIV-008",
+    name: "Camera/microphone without permission",
+    description: "Accessing camera or microphone without proper permission flow violates user privacy and platform policies",
+    severity: "high",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-359"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /getUserMedia\(\s*\{[\s\S]{0,200}(?:audio|video)\s*:\s*true(?![\s\S]{0,200}(?:permission|consent|granted|allowed))/, message: "getUserMedia without permission check" },
+      { pattern: /CameraManager[\s\S]{0,200}openCamera\((?![\s\S]{0,200}(?:checkPermission|requestPermission|CAMERA))/, message: "Android camera access without permission check" },
+      { pattern: /AVCaptureDevice[\s\S]{0,200}requestAccess(?![\s\S]{0,200}(?:authorizationStatus|granted))/, message: "iOS camera/mic access without authorization status check" },
+      { pattern: /MediaRecorder\(\s*(?:stream|media)(?![\s\S]{0,200}(?:permission|consent|granted))/, message: "MediaRecorder used without permission check" },
+    ],
+  },
+  {
+    id: "PRIV-009",
+    name: "Debug/development data in production",
+    description: "Test accounts, debug flags, or mock user data left in production code exposes internal data",
+    severity: "medium",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-215"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:test|debug|mock|fake|dummy)(?:User|Account|Email|Phone|Password)\s*[:=]\s*["'][^"']+["']/, message: "Test/debug user data in source code" },
+      { pattern: /(?:isDebug|debugMode|enableDebug)\s*[:=]\s*true/, message: "Debug mode enabled — may expose sensitive data in production" },
+      { pattern: /["'](?:test@test\.com|admin@admin\.com|user@example\.com)["']/, message: "Test email address in source code" },
+    ],
+  },
+  {
+    id: "PRIV-010",
+    name: "Excessive data collection",
+    description: "Collecting more user data fields than needed for functionality violates data minimization principles",
+    severity: "medium",
+    category: "Privacy & Data Protection",
+    cwe: ["CWE-200"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:collect|gather|track|capture)\(\s*\{[\s\S]{0,500}(?:deviceId|imei|macAddress|serialNumber|fingerprint)[\s\S]{0,200}(?:ipAddress|userAgent|screenResolution|timezone)/, message: "Collecting extensive device fingerprinting data" },
+      { pattern: /navigator\.(?:hardwareConcurrency|deviceMemory)[\s\S]{0,200}navigator\.(?:hardwareConcurrency|deviceMemory|userAgent|platform)/, message: "Collecting browser fingerprinting attributes (hardware info)" },
+      { pattern: /(?:telephonyManager|TelephonyManager|WifiInfo|wifiInfo|Build)[\s\S]{0,100}(?:getImei|getMacAddress|getSerial)\(\)[\s\S]{0,300}(?:getImei|getMacAddress|getSerial)\(\)/, message: "Collecting multiple hardware identifiers — excessive data collection" },
+    ],
+  },
+];
+
+// ─── Database Security ──────────────────────────────────────────
+
+export const dbSecurityRules: Rule[] = [
+  {
+    id: "DB-001",
+    name: "SQL injection via string concatenation",
+    description: "Building SQL queries with string concatenation or template literals allows SQL injection attacks",
+    severity: "critical",
+    category: "Database Security",
+    cwe: ["CWE-89"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:query|execute|exec)\(\s*["'`](?:SELECT|INSERT|UPDATE|DELETE|DROP)[\s\S]{0,100}\$\{/, message: "SQL query with template literal interpolation — SQL injection risk" },
+      { pattern: /(?:query|execute|exec)\(\s*["'](?:SELECT|INSERT|UPDATE|DELETE|DROP)[^"']*["']\s*\+/, message: "SQL query with string concatenation — SQL injection risk" },
+      { pattern: /(?:cursor|conn|db)\.execute\(\s*f?["'](?:SELECT|INSERT|UPDATE|DELETE|DROP)[^"']*(?:\%s|\%\(|\.format|\{)/, message: "Python SQL with string formatting — SQL injection risk" },
+    ],
+  },
+  {
+    id: "DB-002",
+    name: "NoSQL injection",
+    description: "MongoDB queries with user input in operators like $where or $regex allow NoSQL injection",
+    severity: "high",
+    category: "Database Security",
+    cwe: ["CWE-943"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /\$where\s*:\s*(?:req\.|params\.|query\.|body\.|input|user)/, message: "MongoDB $where with user input — NoSQL injection risk" },
+      { pattern: /\$regex\s*:\s*(?:req\.|params\.|query\.|body\.|input|user)/, message: "MongoDB $regex with user input — NoSQL injection / ReDoS risk" },
+      { pattern: /\.find\(\s*\{[\s\S]{0,100}(?:req\.|params\.|query\.|body\.)\w+[\s\S]{0,50}\$(?:gt|gte|lt|lte|ne|in|nin|or|and)/, message: "MongoDB query with user input in operators — NoSQL injection risk" },
+      { pattern: /\.find\(\s*JSON\.parse\(\s*(?:req\.|params\.|query\.|body\.)/, message: "MongoDB find with parsed user input — NoSQL injection risk" },
+    ],
+  },
+  {
+    id: "DB-003",
+    name: "Database credentials in source",
+    description: "Hardcoded database connection strings with passwords expose credentials in version control",
+    severity: "critical",
+    category: "Database Security",
+    cwe: ["CWE-798"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:mongodb|postgres|postgresql|mysql|mssql|redis):\/\/\w+:[^@\s]+@/, message: "Database connection string with embedded password" },
+      { pattern: /(?:DB_PASSWORD|DATABASE_PASSWORD|MYSQL_PASSWORD|POSTGRES_PASSWORD)\s*[:=]\s*["'][^"']+["']/, message: "Hardcoded database password" },
+      { pattern: /(?:createConnection|createPool|connect)\(\s*\{[\s\S]{0,300}password\s*:\s*["'][^"']+["']/, message: "Hardcoded password in database connection config" },
+    ],
+  },
+  {
+    id: "DB-004",
+    name: "Unparameterized queries",
+    description: "Raw SQL queries without prepared statements or parameterized queries are vulnerable to injection",
+    severity: "high",
+    category: "Database Security",
+    cwe: ["CWE-89"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /\.(?:raw|rawQuery|execSQL)\(\s*["'`](?:SELECT|INSERT|UPDATE|DELETE)[\s\S]{0,100}\+\s*(?:req\.|request\.|params\.|input|user|body)/, message: "Raw SQL query with user input concatenation — use parameterized queries" },
+      { pattern: /\.query\(\s*`(?:SELECT|INSERT|UPDATE|DELETE)[\s\S]{0,100}\$\{(?![\s\S]{0,50}(?:escape|sanitize|param))/, message: "Template literal in SQL query without parameterization" },
+      { pattern: /Statement\(\)[\s\S]{0,100}\.execute(?:Query|Update)\(\s*["'][\s\S]{0,100}\+/, message: "Java Statement with concatenated SQL — use PreparedStatement" },
+      { pattern: /db\.Exec\(\s*(?:fmt\.Sprintf|"[^"]*"\s*\+)/, message: "Go db.Exec with formatted/concatenated SQL — use parameterized queries" },
+    ],
+  },
+  {
+    id: "DB-005",
+    name: "Debug mode on database",
+    description: "Database debug/logging mode that logs all queries may expose sensitive data in production",
+    severity: "medium",
+    category: "Database Security",
+    cwe: ["CWE-89"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:sequelize|typeorm|prisma|knex|mongoose)[\s\S]{0,200}logging\s*:\s*(?:true|console\.log)/, message: "ORM query logging enabled — may expose sensitive data" },
+      { pattern: /DJANGO_DEBUG\s*[:=]\s*(?:True|1)|DEBUG\s*=\s*True[\s\S]{0,100}DATABASE/, message: "Django DEBUG mode with database — queries logged" },
+      { pattern: /echo\s*[:=]\s*(?:true|True)[\s\S]{0,100}(?:engine|sqlalchemy)/, message: "SQLAlchemy echo mode — all queries logged" },
+      { pattern: /general_log\s*=\s*(?:1|ON|true)/i, message: "MySQL general log enabled — all queries logged" },
+    ],
+  },
+  {
+    id: "DB-006",
+    name: "Default database credentials",
+    description: "Using root/admin with empty or default passwords makes databases trivially accessible",
+    severity: "critical",
+    category: "Database Security",
+    cwe: ["CWE-200"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:user|username)\s*[:=]\s*["'](?:root|admin|sa|postgres|mysql)["'][\s\S]{0,100}password\s*[:=]\s*["']["']/, message: "Default database user with empty password" },
+      { pattern: /(?:user|username)\s*[:=]\s*["'](?:root|admin|sa|postgres|mysql)["'][\s\S]{0,100}password\s*[:=]\s*["'](?:root|admin|password|123456|pass)["']/, message: "Default database credentials — change immediately" },
+      { pattern: /(?:mongodb|postgres|mysql|redis):\/\/(?:root|admin):(?:root|admin|password|123456)?@/, message: "Connection string with default credentials" },
+    ],
+  },
+  {
+    id: "DB-007",
+    name: "ORM mass assignment",
+    description: "Passing unsanitized user input directly to ORM create/update allows modifying unintended fields",
+    severity: "high",
+    category: "Database Security",
+    cwe: ["CWE-20"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /\.create\(\s*(?:req\.body|request\.body|request\.POST|request\.json)/, message: "ORM create with raw request body — mass assignment risk" },
+      { pattern: /\.update\(\s*(?:req\.body|request\.body|request\.POST|request\.json)/, message: "ORM update with raw request body — mass assignment risk" },
+      { pattern: /\.create\(\s*\{[\s\S]{0,50}\.\.\.(?:req\.body|request\.body|params|body)/, message: "ORM create with spread request body — mass assignment risk" },
+      { pattern: /\.update\(\s*\{[\s\S]{0,50}\.\.\.(?:req\.body|request\.body|params|body)/, message: "ORM update with spread request body — mass assignment risk" },
+    ],
+  },
+  {
+    id: "DB-008",
+    name: "Missing database connection encryption",
+    description: "Database connections without SSL/TLS allow network eavesdropping of queries and data",
+    severity: "medium",
+    category: "Database Security",
+    cwe: ["CWE-200"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:createConnection|createPool|connect)\(\s*\{[\s\S]{0,500}ssl\s*:\s*false/, message: "Database connection with SSL explicitly disabled" },
+      { pattern: /(?:createConnection|createPool|connect)\(\s*\{(?![\s\S]{0,500}ssl)[\s\S]{0,500}\}\s*\)/, message: "Database connection without SSL configuration" },
+      { pattern: /sslmode\s*[:=]\s*["']disable["']/, message: "PostgreSQL sslmode=disable — unencrypted connection" },
+      { pattern: /useSSL\s*[:=]\s*false/, message: "MySQL useSSL=false — unencrypted connection" },
+    ],
+  },
+  {
+    id: "DB-009",
+    name: "Excessive query privileges",
+    description: "Application connecting to database as admin/root user grants excessive privileges for routine operations",
+    severity: "medium",
+    category: "Database Security",
+    cwe: ["CWE-269"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:user|username)\s*[:=]\s*["'](?:root|sa|admin|postgres|dba|sysadmin)["'][\s\S]{0,200}(?:createConnection|createPool|connect|engine)/, message: "Application using database admin/root user — excessive privileges" },
+      { pattern: /(?:mongodb|postgres|mysql):\/\/(?:root|admin|sa|postgres)[:@][\s\S]{0,100}(?:connect|createClient)/, message: "Connection string with admin user — excessive privileges" },
+      { pattern: /GRANT\s+ALL\s+PRIVILEGES[\s\S]{0,100}(?:app|application|web|api)/i, message: "Granting ALL PRIVILEGES to application user — excessive permissions" },
+    ],
+  },
+  {
+    id: "DB-010",
+    name: "Database backup in web root",
+    description: "Database dump or backup files in publicly accessible directories allow data theft",
+    severity: "critical",
+    category: "Database Security",
+    cwe: ["CWE-538"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.java", "**/*.kt", "**/*.rs", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:public|static|www|wwwroot|htdocs|webroot)\/[\w\-]*\.(?:sql|dump|bak|sqlite|db)\b/, message: "Database backup file in web-accessible directory" },
+      { pattern: /express\.static\([\s\S]{0,100}(?:\.sql|\.dump|\.bak|\.sqlite|\.db)/, message: "Static file serving may expose database backups" },
+      { pattern: /(?:href|src|url)\s*[:=]\s*["'][^"']*\.(?:sql|dump|bak|sqlite)\b/, message: "Link to database backup file in web content" },
+    ],
+  },
+];
+
+// ─── Supply Chain & Dependencies ────────────────────────────────
+
+export const supplyChainRules: Rule[] = [
+  {
+    id: "DEP-101",
+    name: "Eval of dynamic content",
+    description: "Using eval() with variable input allows arbitrary code execution and is a critical injection vector",
+    severity: "critical",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-94"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /\beval\s*\(\s*(?:req\.|request\.|params\.|query\.|body\.|input\[|user)/, message: "eval() with user input — arbitrary code execution risk" },
+      { pattern: /\beval\s*\(\s*`\$\{/, message: "eval() with interpolated template literal — arbitrary code execution risk" },
+      { pattern: /(?<!\.)\bexec\s*\(\s*(?!["'])\w+(?:[\s\S]{0,50}(?:input|request|param|arg))/, message: "Python exec() with variable input — code execution risk" },
+      { pattern: /new\s+Function\(\s*(?!["']return)(?:req\.|params\.|query\.|body\.|input|user)/, message: "new Function() with user input — code execution risk" },
+    ],
+  },
+  {
+    id: "DEP-102",
+    name: "Dynamic require/import",
+    description: "Dynamic require() or import() with variable paths allows loading arbitrary modules",
+    severity: "high",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-94"],
+    filePatterns: ["**/*.ts", "**/*.js"],
+    badPatterns: [
+      { pattern: /\brequire\(\s*(?:req\.|request\.|params\.|query\.|body\.|input\[|user)/, message: "Dynamic require() with user input — arbitrary module loading risk" },
+      { pattern: /\bimport\(\s*(?:req\.|request\.|params\.|query\.|body\.|input\[|user)/, message: "Dynamic import() with user input — arbitrary module loading risk" },
+      { pattern: /\brequire\(\s*`\$\{(?:req|request|params|query|body|input|user)/, message: "require() with user-controlled template literal — arbitrary module loading risk" },
+      { pattern: /\b__import__\(\s*(?:request\.|args\.|input|user)/, message: "Python __import__ with user input — arbitrary module loading risk" },
+    ],
+  },
+  {
+    id: "DEP-103",
+    name: "Postinstall script in package.json",
+    description: "Postinstall scripts in dependencies can execute arbitrary code during npm install",
+    severity: "medium",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-829"],
+    filePatterns: ["**/package.json"],
+    badPatterns: [
+      { pattern: /["']postinstall["']\s*:\s*["'][^"']+["']/, message: "postinstall script detected — review for malicious commands" },
+      { pattern: /["']preinstall["']\s*:\s*["'][^"']+["']/, message: "preinstall script detected — review for malicious commands" },
+      { pattern: /["']install["']\s*:\s*["'][^"']+(?:curl|wget|bash|sh|node\s+-e)/, message: "Install script runs network or shell command — supply chain risk" },
+    ],
+  },
+  {
+    id: "DEP-104",
+    name: "Unpinned dependency versions",
+    description: "Using * or latest as dependency versions allows pulling in compromised or breaking versions",
+    severity: "medium",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-1104"],
+    filePatterns: ["**/package.json"],
+    badPatterns: [
+      { pattern: /:\s*["']latest["']/, message: "Dependency pinned to 'latest' — unpredictable version resolution" },
+    ],
+  },
+  {
+    id: "DEP-105",
+    name: "HTTP dependency source",
+    description: "Dependencies fetched over HTTP (not HTTPS) are vulnerable to man-in-the-middle attacks",
+    severity: "high",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-319"],
+    filePatterns: ["**/package.json", "**/*.ts", "**/*.js", "**/*.py", "**/*.toml", "**/*.cfg"],
+    badPatterns: [
+      { pattern: /["']http:\/\/(?:registry\.|npm\.|pypi\.|gems\.|maven\.)/, message: "Dependency registry over HTTP — MITM risk, use HTTPS" },
+      { pattern: /registry\s*[:=]\s*["']?http:\/\//, message: "Package registry configured with HTTP — use HTTPS" },
+      { pattern: /--index-url\s+http:\/\//, message: "Python pip index over HTTP — MITM risk" },
+    ],
+  },
+  {
+    id: "DEP-106",
+    name: "Git dependency without commit hash",
+    description: "Git dependencies referencing branches instead of commit hashes can be silently replaced",
+    severity: "medium",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-829"],
+    filePatterns: ["**/package.json", "**/*.toml", "**/*.cfg", "**/*.txt"],
+    badPatterns: [
+      { pattern: /["']git(?:\+https?)?:\/\/[^"']+#(?:master|main|develop|dev)["']/, message: "Git dependency pinned to branch name — use commit hash" },
+      { pattern: /["'](?:github|gitlab|bitbucket):[\w\-]+\/[\w\-]+(?:#(?:master|main|develop))?["']/, message: "Git dependency without commit hash — mutable reference" },
+      { pattern: /git\+https?:\/\/[^@#]+(?:#(?:master|main|develop))/, message: "Git dependency referencing branch — use commit hash for immutability" },
+    ],
+  },
+  {
+    id: "DEP-107",
+    name: "Prototype pollution",
+    description: "Merging or assigning user-controlled objects into application objects can modify Object.prototype",
+    severity: "high",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-1321"],
+    filePatterns: ["**/*.ts", "**/*.js"],
+    badPatterns: [
+      { pattern: /Object\.assign\(\s*\w+\s*,\s*(?:req\.|params\.|query\.|body\.|input|JSON\.parse)/, message: "Object.assign with user input into existing object — prototype pollution risk" },
+      { pattern: /(?:lodash|_)\.(?:merge|defaultsDeep|set)\(\s*\w+\s*,\s*(?:req\.|params\.|query\.|body\.|input)/, message: "lodash deep merge with user input — prototype pollution risk" },
+      { pattern: /\bfor\s*\(\s*(?:let|var|const)\s+\w+\s+in\s+(?:req\.|params\.|query\.|body\.)[\s\S]{0,200}\[\w+\]\s*=/, message: "Iterating user input keys and assigning to object — prototype pollution risk" },
+    ],
+  },
+  {
+    id: "DEP-108",
+    name: "Unsafe npm scripts",
+    description: "npm scripts that pipe remote content to shell can execute arbitrary code on developer machines",
+    severity: "medium",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-1104"],
+    filePatterns: ["**/package.json"],
+    badPatterns: [
+      { pattern: /["'](?:pre|post)?(?:install|build|test|start)["']\s*:\s*["'][^"']*(?:curl|wget)\s+[^"']*\|\s*(?:bash|sh|node)/, message: "npm script pipes remote content to shell — supply chain risk" },
+      { pattern: /["'](?:pre|post)?(?:install|build|test|start)["']\s*:\s*["'][^"']*(?:curl|wget)\s+-[^"']*\|\s*/, message: "npm script downloads and pipes — review for supply chain risk" },
+    ],
+  },
+  {
+    id: "DEP-109",
+    name: "Missing lockfile",
+    description: "Package.json without a lockfile allows non-deterministic dependency resolution",
+    severity: "medium",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-1104"],
+    filePatterns: ["**/package.json"],
+    requiredPatterns: [
+      { pattern: /package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb/, message: "No lockfile found alongside package.json — dependency versions may vary between installs", filePattern: "**/package-lock.json" },
+    ],
+  },
+  {
+    id: "DEP-110",
+    name: "innerHTML with user content",
+    description: "Setting innerHTML or dangerouslySetInnerHTML with dynamic content allows XSS attacks",
+    severity: "high",
+    category: "Supply Chain & Dependencies",
+    cwe: ["CWE-79"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+    badPatterns: [
+      { pattern: /\.innerHTML\s*=\s*(?:req\.|request\.|params\.|query\.|body\.)/, message: "innerHTML set with user input — XSS risk" },
+      { pattern: /dangerouslySetInnerHTML\s*=\s*\{\s*\{\s*__html\s*:\s*(?:req\.|request\.|params\.|query\.|body\.)/, message: "dangerouslySetInnerHTML with user input — XSS risk" },
+      { pattern: /document\.write\(\s*(?:req\.|request\.|params\.|query\.|body\.)/, message: "document.write with user input — XSS risk" },
+    ],
+  },
+];
+
+// ─── Smart Contracts ─────────────────────────────────────────
+
+export const smartContractRules: Rule[] = [
+  {
+    id: "SOL-001",
+    name: "Reentrancy vulnerability",
+    description: "External call before state change allows reentrancy attacks",
+    severity: "critical",
+    category: "Smart Contracts",
+    cwe: ["CWE-841"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /\.call\{value:[\s\S]{0,100}(?!reentrancy|nonReentrant|ReentrancyGuard)/, message: "External call with value — possible reentrancy without guard" },
+      { pattern: /\.call\.value\([\s\S]{0,100}(?!reentrancy|nonReentrant)/, message: "Legacy call.value pattern — reentrancy risk" },
+    ],
+  },
+  {
+    id: "SOL-002",
+    name: "Unchecked external call return",
+    description: "External call return value must be checked for failure",
+    severity: "high",
+    category: "Smart Contracts",
+    cwe: ["CWE-252"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /(?:address\s*\(.*\)|msg\.sender)\.(?:send|call)\s*\([\s\S]{0,100}(?!require|if|assert|bool)/, message: "Unchecked return value of external call" },
+    ],
+  },
+  {
+    id: "SOL-003",
+    name: "tx.origin for authentication",
+    description: "tx.origin can be manipulated via phishing contracts — use msg.sender",
+    severity: "critical",
+    category: "Smart Contracts",
+    cwe: ["CWE-477"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /require\s*\(\s*tx\.origin\s*==/, message: "tx.origin used for authentication — use msg.sender" },
+      { pattern: /if\s*\(\s*tx\.origin\s*==/, message: "tx.origin used in access control" },
+    ],
+  },
+  {
+    id: "SOL-004",
+    name: "Integer overflow/underflow",
+    description: "Arithmetic without SafeMath or unchecked block may overflow",
+    severity: "high",
+    category: "Smart Contracts",
+    cwe: ["CWE-190"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /pragma solidity\s+(?:0\.[0-6]\.|0\.7\.)[\s\S]{0,2000}(?:\+\+|\-\-|\+=|\-=|\*=)(?![\s\S]{0,500}SafeMath)/, message: "Arithmetic in pre-0.8 Solidity without SafeMath" },
+    ],
+  },
+  {
+    id: "SOL-005",
+    name: "Delegatecall to untrusted contract",
+    description: "Delegatecall executes code in caller context — untrusted target can drain funds",
+    severity: "critical",
+    category: "Smart Contracts",
+    cwe: ["CWE-829"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /\.delegatecall\s*\(/, message: "Delegatecall usage — ensure target is trusted" },
+    ],
+  },
+  {
+    id: "SOL-006",
+    name: "Unprotected selfdestruct",
+    description: "selfdestruct without access control allows anyone to destroy contract",
+    severity: "critical",
+    category: "Smart Contracts",
+    cwe: ["CWE-284"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /selfdestruct\s*\([\s\S]{0,200}(?!onlyOwner|require\s*\(\s*msg\.sender)/, message: "selfdestruct without access control" },
+    ],
+  },
+  {
+    id: "SOL-007",
+    name: "Weak randomness source",
+    description: "block.timestamp and blockhash are predictable — not suitable for randomness",
+    severity: "high",
+    category: "Smart Contracts",
+    cwe: ["CWE-330"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /(?:block\.timestamp|block\.difficulty|blockhash)\s*[\s\S]{0,50}(?:random|seed|winner|lottery)/i, message: "Block properties used for randomness — predictable by miners" },
+      { pattern: /keccak256\s*\(\s*abi\.encode(?:Packed)?\s*\([\s\S]{0,100}block\.(?:timestamp|difficulty|number)/, message: "Weak randomness from block properties in hash" },
+    ],
+  },
+  {
+    id: "SOL-008",
+    name: "Floating pragma",
+    description: "Unpinned pragma version may compile with unintended compiler",
+    severity: "medium",
+    category: "Smart Contracts",
+    cwe: ["CWE-664"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /pragma solidity\s*\^/, message: "Floating pragma — pin to specific version" },
+    ],
+  },
+  {
+    id: "SOL-009",
+    name: "DoS with unbounded loop",
+    description: "Loops over dynamic arrays may exceed block gas limit",
+    severity: "high",
+    category: "Smart Contracts",
+    cwe: ["CWE-400"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /for\s*\([\s\S]{0,50}\.length[\s\S]{0,30}\)[\s\S]{0,100}\.(?:transfer|send|call)/, message: "Loop with external calls — may exceed gas limit" },
+    ],
+  },
+  {
+    id: "SOL-010",
+    name: "Missing access control on state change",
+    description: "Public/external functions modifying state should have access control",
+    severity: "critical",
+    category: "Smart Contracts",
+    cwe: ["CWE-284"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /function\s+\w+\s*\([^)]*\)\s+(?:public|external)\s+(?!view|pure)[\s\S]{0,100}(?!onlyOwner|require\s*\(\s*msg\.sender|onlyRole|modifier)/, message: "State-changing function without access control modifier" },
+    ],
+  },
+  {
+    id: "SOL-011",
+    name: "Flash loan price manipulation",
+    description: "Single-block price oracle can be manipulated via flash loans",
+    severity: "high",
+    category: "Smart Contracts",
+    cwe: ["CWE-682"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /getReserves\(\)[\s\S]{0,200}(?:price|rate|value)[\s\S]{0,100}(?!TWAP|twap|timeWeighted|cumulative)/i, message: "Spot price from reserves — flash loan manipulation risk" },
+    ],
+  },
+  {
+    id: "SOL-012",
+    name: "ERC20 approval race condition",
+    description: "approve() should first set to 0 to prevent double-spend race",
+    severity: "medium",
+    category: "Smart Contracts",
+    cwe: ["CWE-362"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /\.approve\s*\(\s*\w+\s*,\s*\w+\s*\)[\s\S]{0,100}(?!\.approve\s*\(\s*\w+\s*,\s*0)/, message: "ERC20 approve without setting to 0 first — race condition" },
+    ],
+  },
+  {
+    id: "SOL-013",
+    name: "Hardcoded gas amount",
+    description: "Hardcoded gas may break with EVM changes — use gasleft() or no limit",
+    severity: "medium",
+    category: "Smart Contracts",
+    cwe: ["CWE-400"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /\.call\{[\s\S]{0,30}gas:\s*\d+/, message: "Hardcoded gas in call — may break with EVM updates" },
+      { pattern: /\.gas\(\d+\)\./, message: "Legacy hardcoded gas amount" },
+    ],
+  },
+  {
+    id: "SOL-014",
+    name: "Unchecked low-level call",
+    description: "Low-level calls return bool — must check for success",
+    severity: "high",
+    category: "Smart Contracts",
+    cwe: ["CWE-252"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /\baddress\s*\([\s\S]{0,50}\)\.call\s*\([\s\S]{0,50}\)\s*;(?!\s*(?:require|if|assert))/, message: "Low-level call without success check" },
+    ],
+  },
+  {
+    id: "SOL-015",
+    name: "Uninitialized storage pointer",
+    description: "Uninitialized local storage variables point to slot 0 — corrupts state",
+    severity: "high",
+    category: "Smart Contracts",
+    cwe: ["CWE-824"],
+    filePatterns: ["**/*.sol"],
+    badPatterns: [
+      { pattern: /\bstruct\s+\w+\s+\w+\s*;(?!\s*=)/, message: "Uninitialized storage struct — may corrupt slot 0" },
+    ],
+  },
+];
+
+// ─── iOS Security ────────────────────────────────────────────
+
+export const iosSecurityRules: Rule[] = [
+  {
+    id: "IOS-001",
+    name: "Keychain without access control",
+    description: "Keychain items with kSecAttrAccessibleAlways are accessible when device is locked",
+    severity: "high",
+    category: "iOS Security",
+    cwe: ["CWE-312"],
+    filePatterns: ["**/*.swift", "**/*.m"],
+    badPatterns: [
+      { pattern: /kSecAttrAccessibleAlways(?!After)/, message: "Keychain item accessible when device locked — use kSecAttrAccessibleWhenUnlocked" },
+    ],
+  },
+  {
+    id: "IOS-002",
+    name: "Sensitive data in NSLog/print",
+    description: "NSLog and print output persists on device — leaks secrets",
+    severity: "high",
+    category: "iOS Security",
+    cwe: ["CWE-319"],
+    filePatterns: ["**/*.swift", "**/*.m"],
+    badPatterns: [
+      { pattern: /(?:NSLog|print)\s*\(.*(?:password|token|secret|apiKey|privateKey|creditCard)/i, message: "Logging sensitive data — use os_log with privacy" },
+    ],
+  },
+  {
+    id: "IOS-003",
+    name: "Sensitive data in UserDefaults",
+    description: "UserDefaults is not encrypted — secrets must use Keychain",
+    severity: "high",
+    category: "iOS Security",
+    cwe: ["CWE-693"],
+    filePatterns: ["**/*.swift"],
+    badPatterns: [
+      { pattern: /UserDefaults[\s\S]{0,50}(?:password|token|secret|apiKey|privateKey)/i, message: "Storing sensitive data in UserDefaults — use Keychain" },
+    ],
+  },
+  {
+    id: "IOS-004",
+    name: "App Transport Security disabled",
+    description: "NSAllowsArbitraryLoads disables TLS requirement for all connections",
+    severity: "high",
+    category: "iOS Security",
+    cwe: ["CWE-532"],
+    filePatterns: ["**/*.plist"],
+    badPatterns: [
+      { pattern: /NSAllowsArbitraryLoads[\s\S]{0,50}true/i, message: "ATS disabled — allows insecure HTTP connections" },
+    ],
+  },
+  {
+    id: "IOS-005",
+    name: "Clipboard with sensitive data",
+    description: "Clipboard content is shared across apps — sensitive data may leak",
+    severity: "medium",
+    category: "iOS Security",
+    cwe: ["CWE-693"],
+    filePatterns: ["**/*.swift"],
+    badPatterns: [
+      { pattern: /UIPasteboard[\s\S]{0,100}(?:password|token|secret|key)/i, message: "Sensitive data written to clipboard" },
+    ],
+  },
+  {
+    id: "IOS-006",
+    name: "WebView JavaScript without sanitization",
+    description: "JavaScript enabled in WebView without input sanitization enables XSS",
+    severity: "high",
+    category: "iOS Security",
+    cwe: ["CWE-79"],
+    filePatterns: ["**/*.swift"],
+    badPatterns: [
+      { pattern: /WKWebView[\s\S]{0,300}evaluateJavaScript\s*\([\s\S]{0,50}(?!sanitize|escape)/, message: "WebView evaluateJavaScript without sanitization" },
+      { pattern: /javaScriptEnabled\s*=\s*true[\s\S]{0,300}load(?:HTML|Request)\s*\([\s\S]{0,50}(?!sanitize)/, message: "WebView with JS enabled loading potentially untrusted content" },
+    ],
+  },
+  {
+    id: "IOS-007",
+    name: "Certificate pinning disabled",
+    description: "URLSession without server trust validation accepts any certificate",
+    severity: "high",
+    category: "iOS Security",
+    cwe: ["CWE-295"],
+    filePatterns: ["**/*.swift"],
+    badPatterns: [
+      { pattern: /\.serverTrust[\s\S]{0,50}(?:accept|completionHandler\(.*\.useCredential|\.performDefaultHandling)/, message: "Server trust bypassed — certificate pinning disabled" },
+    ],
+  },
+  {
+    id: "IOS-008",
+    name: "Biometric auth bypass",
+    description: "LAContext evaluate without proper fallback allows bypass",
+    severity: "high",
+    category: "iOS Security",
+    cwe: ["CWE-287"],
+    filePatterns: ["**/*.swift"],
+    badPatterns: [
+      { pattern: /LAContext[\s\S]{0,200}evaluatePolicy[\s\S]{0,200}(?!fallback|password|deviceOwnerAuthentication)/, message: "Biometric auth without fallback handling" },
+    ],
+  },
+  {
+    id: "IOS-009",
+    name: "Certificate pinning disabled",
+    description: "URLSession without server trust validation accepts any certificate",
+    severity: "high",
+    category: "iOS Security",
+    cwe: ["CWE-295"],
+    filePatterns: ["**/*.swift"],
+    badPatterns: [
+      { pattern: /serverTrust!/, message: "Force-unwrapped serverTrust — pinning bypassed" },
+      { pattern: /\.cancelAuthenticationChallenge/, message: "Authentication challenge cancelled — cert validation skipped" },
+    ],
+  },
+  {
+    id: "IOS-010",
+    name: "URL scheme without validation",
+    description: "Custom URL scheme handler must validate input to prevent injection",
+    severity: "high",
+    category: "iOS Security",
+    cwe: ["CWE-939"],
+    filePatterns: ["**/*.swift"],
+    badPatterns: [
+      { pattern: /func application[\s\S]{0,200}open url:[\s\S]{0,300}return true(?![\s\S]{0,100}validate|guard)/, message: "URL scheme handler returns true without validation" },
+    ],
+  },
+  {
+    id: "IOS-011",
+    name: "Debug logging in release build",
+    description: "Debug print statements leak info in production",
+    severity: "medium",
+    category: "iOS Security",
+    cwe: ["CWE-532"],
+    filePatterns: ["**/*.swift"],
+    badPatterns: [
+      { pattern: /(?<!#if DEBUG[\s\S]{0,500})(?:debugPrint|dump)\s*\([\s\S]{0,50}(?:token|password|key|secret)/i, message: "Debug logging of sensitive data outside DEBUG block" },
+    ],
+  },
+];
+
+// ─── Go Security ─────────────────────────────────────────────
+
+export const goSecurityRules: Rule[] = [
+  {
+    id: "GO-001",
+    name: "SQL injection in Go",
+    description: "String formatting in SQL queries enables injection attacks",
+    severity: "critical",
+    category: "Go Security",
+    cwe: ["CWE-89"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /fmt\.Sprintf\s*\(\s*["'](?:SELECT|INSERT|UPDATE|DELETE)\b[^"']*(?:WHERE|SET|VALUES)[^"']*=\s*['"]?%[svd]/i, message: "fmt.Sprintf interpolating values in SQL WHERE/SET/VALUES — use parameterized queries" },
+      { pattern: /(?:Query|Exec)\s*\(\s*["'][\s\S]{0,50}\+\s*\w+/, message: "String concatenation in SQL query" },
+    ],
+  },
+  {
+    id: "GO-002",
+    name: "Command injection in Go",
+    description: "exec.Command with user input enables command injection",
+    severity: "critical",
+    category: "Go Security",
+    cwe: ["CWE-78"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /exec\.Command\s*\(\s*(?:r\.|req\.|request\.|params\.|input)/, message: "exec.Command with user-controlled input" },
+      { pattern: /exec\.Command\s*\(\s*["'](?:bash|sh|cmd)["']\s*,\s*["']-c["']/, message: "Shell command execution — injection risk" },
+    ],
+  },
+  {
+    id: "GO-003",
+    name: "Insecure TLS config in Go",
+    description: "Weak TLS versions or cipher suites in Go",
+    severity: "high",
+    category: "Go Security",
+    cwe: ["CWE-326"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /MinVersion\s*:\s*tls\.Version(?:SSL30|TLS10|TLS11)\b/, message: "Weak TLS minimum version — use TLS 1.2+" },
+      { pattern: /CipherSuites\s*:\s*\[\]\s*uint16\s*\{[\s\S]{0,200}(?:RC4|DES|3DES|NULL)/, message: "Weak cipher suite in TLS config" },
+    ],
+  },
+  {
+    id: "GO-004",
+    name: "Hardcoded credentials in Go",
+    description: "Credentials hardcoded in source code",
+    severity: "critical",
+    category: "Go Security",
+    cwe: ["CWE-798"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /(?:password|secret|apiKey|api_key)\s*(?::=|=)\s*"[^"]{8,}"/i, message: "Hardcoded credential in Go source" },
+    ],
+  },
+  {
+    id: "GO-005",
+    name: "Path traversal in Go",
+    description: "filepath.Join with user input without Clean allows directory traversal",
+    severity: "high",
+    category: "Go Security",
+    cwe: ["CWE-22"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /filepath\.Join\s*\([\s\S]{0,50}(?:\br\.|req\.|request\.|params\.)[\s\S]{0,100}(?!filepath\.Clean|filepath\.Rel)/, message: "Path from user input without sanitization" },
+    ],
+  },
+  {
+    id: "GO-006",
+    name: "Weak crypto in Go",
+    description: "MD5 and SHA1 are cryptographically broken for security use",
+    severity: "high",
+    category: "Go Security",
+    cwe: ["CWE-327"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /md5\.(?:New|Sum)\s*\([\s\S]{0,50}(?:password|passwd|token|secret|key|credential)/i, message: "MD5 used for security-sensitive value — use SHA-256 or bcrypt" },
+      { pattern: /sha1\.(?:New|Sum)\s*\([\s\S]{0,50}(?:password|passwd|token|secret|key|signature)/i, message: "SHA1 used for security-sensitive value — use SHA-256 or better" },
+    ],
+  },
+  {
+    id: "GO-007",
+    name: "Unvalidated redirect in Go",
+    description: "Redirect to user-supplied URL enables open redirect attack",
+    severity: "high",
+    category: "Go Security",
+    cwe: ["CWE-78"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /http\.Redirect\s*\(\s*\w+\s*,\s*\w+\s*,\s*(?:r\.|req\.)/, message: "Redirect to user-controlled URL — open redirect" },
+    ],
+  },
+  {
+    id: "GO-008",
+    name: "SSRF in Go",
+    description: "HTTP client with user-controlled URL enables SSRF",
+    severity: "high",
+    category: "Go Security",
+    cwe: ["CWE-200"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /http\.(?:Get|Post|Head)\s*\(\s*(?:r\.|req\.|request\.|user|input)/, message: "HTTP request to user-controlled URL — SSRF risk" },
+    ],
+  },
+  {
+    id: "GO-009",
+    name: "Goroutine leak",
+    description: "Goroutine without context or cancellation may leak resources",
+    severity: "medium",
+    category: "Go Security",
+    cwe: ["CWE-362"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /go\s+func\s*\(\s*\)\s*\{\s*(?:for|select)\s*\{(?![\s\S]{0,100}(?:ctx\.Done|context\.With|timer|ticker|break|return))/, message: "Goroutine with loop but no context cancellation — may leak" },
+    ],
+  },
+  {
+    id: "GO-010",
+    name: "Unsafe pointer usage",
+    description: "unsafe.Pointer casts bypass type safety and memory safety",
+    severity: "high",
+    category: "Go Security",
+    cwe: ["CWE-787"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /unsafe\.Pointer/, message: "unsafe.Pointer usage — bypasses Go memory safety" },
+    ],
+  },
+  {
+    id: "GO-011",
+    name: "Goroutine leak",
+    description: "Goroutine with blocking operation without context cancellation leaks resources",
+    severity: "medium",
+    category: "Go Security",
+    cwe: ["CWE-401"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /go\s+func\s*\(\s*\)\s*\{\s*for\s*\{(?![\s\S]{0,100}(?:ctx\.Done|context\.With|select|break|return))/, message: "Goroutine with infinite loop — no context cancellation" },
+    ],
+  },
+  {
+    id: "GO-012",
+    name: "Unsafe type punning",
+    description: "Converting between unsafe.Pointer and uintptr breaks garbage collector safety",
+    severity: "high",
+    category: "Go Security",
+    cwe: ["CWE-787"],
+    filePatterns: ["**/*.go"],
+    badPatterns: [
+      { pattern: /uintptr\s*\(\s*unsafe\.Pointer/, message: "uintptr conversion of unsafe.Pointer — GC safety risk" },
+      { pattern: /\(\*\w+\)\s*\(\s*unsafe\.Pointer/, message: "Type punning via unsafe.Pointer cast" },
+    ],
+  },
+];
+
+// ─── PHP Security ────────────────────────────────────────────
+
+export const phpSecurityRules: Rule[] = [
+  {
+    id: "PHP-001",
+    name: "SQL injection in PHP",
+    description: "SQL query with user input concatenation enables injection",
+    severity: "critical",
+    category: "PHP Security",
+    cwe: ["CWE-89"],
+    filePatterns: ["**/*.php"],
+    badPatterns: [
+      { pattern: /(?:mysql_query|mysqli_query)\s*\([\s\S]{0,100}\$_(?:GET|POST|REQUEST)/, message: "SQL query with unsanitized user input" },
+      { pattern: /->query\s*\(\s*["'][\s\S]{0,50}\.\s*\$_(?:GET|POST|REQUEST)/, message: "Query with concatenated user input" },
+    ],
+  },
+  {
+    id: "PHP-002",
+    name: "Command injection in PHP",
+    description: "System command with user input enables arbitrary command execution",
+    severity: "critical",
+    category: "PHP Security",
+    cwe: ["CWE-78"],
+    filePatterns: ["**/*.php"],
+    badPatterns: [
+      { pattern: /\b(?:exec|system|passthru|shell_exec|popen)\s*\([\s\S]{0,50}\$_(?:GET|POST|REQUEST)/, message: "Command execution with user input" },
+    ],
+  },
+  {
+    id: "PHP-003",
+    name: "File inclusion vulnerability",
+    description: "include/require with user input enables Local/Remote File Inclusion",
+    severity: "critical",
+    category: "PHP Security",
+    cwe: ["CWE-98"],
+    filePatterns: ["**/*.php"],
+    badPatterns: [
+      { pattern: /\b(?:include|require|include_once|require_once)\s*\(?\s*\$_(?:GET|POST|REQUEST)/, message: "File inclusion with user input — LFI/RFI" },
+    ],
+  },
+  {
+    id: "PHP-004",
+    name: "Insecure deserialization in PHP",
+    description: "unserialize() with user input enables code execution",
+    severity: "critical",
+    category: "PHP Security",
+    cwe: ["CWE-94"],
+    filePatterns: ["**/*.php"],
+    badPatterns: [
+      { pattern: /\bunserialize\s*\(\s*\$_(?:GET|POST|REQUEST|COOKIE)/, message: "Insecure deserialization of user input" },
+    ],
+  },
+  {
+    id: "PHP-005",
+    name: "XSS via echo",
+    description: "Echoing user input without escaping enables Cross-Site Scripting",
+    severity: "high",
+    category: "PHP Security",
+    cwe: ["CWE-22"],
+    filePatterns: ["**/*.php"],
+    badPatterns: [
+      { pattern: /\b(?:echo|print)\s+\$_(?:GET|POST|REQUEST)/, message: "Echoing user input without htmlspecialchars" },
+    ],
+  },
+  {
+    id: "PHP-006",
+    name: "Weak password hashing in PHP",
+    description: "MD5/SHA1 for passwords is trivially crackable — use password_hash()",
+    severity: "high",
+    category: "PHP Security",
+    cwe: ["CWE-200"],
+    filePatterns: ["**/*.php"],
+    badPatterns: [
+      { pattern: /\b(?:md5|sha1)\s*\(\s*\$.*(?:password|passwd|pass)\b/i, message: "Weak hash for password — use password_hash()" },
+    ],
+  },
+  {
+    id: "PHP-007",
+    name: "Open redirect in PHP",
+    description: "Redirect to user-supplied URL without validation",
+    severity: "high",
+    category: "PHP Security",
+    cwe: ["CWE-601"],
+    filePatterns: ["**/*.php"],
+    badPatterns: [
+      { pattern: /header\s*\(\s*["']Location:\s*["']\s*\.\s*\$_(?:GET|POST|REQUEST)/, message: "Open redirect — redirecting to user-controlled URL" },
+    ],
+  },
+  {
+    id: "PHP-008",
+    name: "Type juggling vulnerability",
+    description: "Loose comparison with user input enables authentication bypass",
+    severity: "high",
+    category: "PHP Security",
+    cwe: ["CWE-843"],
+    filePatterns: ["**/*.php"],
+    badPatterns: [
+      { pattern: /\$_(?:GET|POST|REQUEST)\s*\[.*\]\s*==\s*(?!=)/, message: "Loose comparison with user input — use ===" },
+    ],
+  },
+];
+
+// ─── Ruby Security ───────────────────────────────────────────
+
+export const rubySecurityRules: Rule[] = [
+  {
+    id: "RUBY-001",
+    name: "SQL injection in Ruby",
+    description: "String interpolation in ActiveRecord where clause enables injection",
+    severity: "critical",
+    category: "Ruby Security",
+    cwe: ["CWE-89"],
+    filePatterns: ["**/*.rb"],
+    badPatterns: [
+      { pattern: /\.where\s*\(\s*["'][\s\S]{0,50}#\{/, message: "String interpolation in SQL where — use parameterized query" },
+    ],
+  },
+  {
+    id: "RUBY-002",
+    name: "Command injection in Ruby",
+    description: "System command with user input enables code execution",
+    severity: "critical",
+    category: "Ruby Security",
+    cwe: ["CWE-78"],
+    filePatterns: ["**/*.rb"],
+    badPatterns: [
+      { pattern: /\b(?:system|exec|%x)\s*[\(\{]?[\s\S]{0,30}#\{.*params/, message: "Command execution with user input" },
+      { pattern: /`[^`]*#\{.*params/, message: "Backtick command with user input" },
+    ],
+  },
+  {
+    id: "RUBY-003",
+    name: "Mass assignment vulnerability",
+    description: "Permitting all params or using permit! allows mass assignment",
+    severity: "high",
+    category: "Ruby Security",
+    cwe: ["CWE-915"],
+    filePatterns: ["**/*.rb"],
+    badPatterns: [
+      { pattern: /\.permit!/, message: "permit! allows all parameters — mass assignment risk" },
+      { pattern: /params\.permit\s*\(\s*!/, message: "Permitting all params" },
+    ],
+  },
+  {
+    id: "RUBY-004",
+    name: "Open redirect in Ruby",
+    description: "Redirect to user-controlled URL without validation",
+    severity: "high",
+    category: "Ruby Security",
+    cwe: ["CWE-601"],
+    filePatterns: ["**/*.rb"],
+    badPatterns: [
+      { pattern: /redirect_to\s+params\s*\[/, message: "Redirect to user-controlled params — open redirect" },
+    ],
+  },
+  {
+    id: "RUBY-005",
+    name: "Insecure YAML load",
+    description: "YAML.load with untrusted input enables code execution — use safe_load",
+    severity: "critical",
+    category: "Ruby Security",
+    cwe: ["CWE-502"],
+    filePatterns: ["**/*.rb"],
+    badPatterns: [
+      { pattern: /YAML\.load\s*\((?![\s\S]{0,30}safe)/, message: "YAML.load without safe mode — use YAML.safe_load" },
+    ],
+  },
+  {
+    id: "RUBY-006",
+    name: "Hardcoded secrets in Ruby",
+    description: "Secret keys hardcoded in source code",
+    severity: "critical",
+    category: "Ruby Security",
+    cwe: ["CWE-798"],
+    filePatterns: ["**/*.rb"],
+    badPatterns: [
+      { pattern: /(?:secret_key_base|api_key|secret_token)\s*=\s*["'][^"']{8,}["']/, message: "Hardcoded secret in Ruby source" },
+    ],
+  },
+  {
+    id: "RUBY-007",
+    name: "Render user input directly",
+    description: "Rendering user input as inline template enables XSS/SSTI",
+    severity: "high",
+    category: "Ruby Security",
+    cwe: ["CWE-79"],
+    filePatterns: ["**/*.rb"],
+    badPatterns: [
+      { pattern: /render\s+(?:inline|text)\s*:\s*params/, message: "Rendering user params as template — XSS/SSTI risk" },
+    ],
+  },
+];
+
+// ─── Python Security ─────────────────────────────────────────
+
+export const pythonSecurityRules: Rule[] = [
+  {
+    id: "PY-001",
+    name: "Eval with user input",
+    description: "eval()/exec() with user input enables arbitrary code execution",
+    severity: "critical",
+    category: "Python Security",
+    cwe: ["CWE-78"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /\beval\s*\(\s*(?:request\.|input\(|sys\.argv)/, message: "eval() with user input — code execution" },
+      { pattern: /\bexec\s*\(\s*(?:request\.|input\(|sys\.argv)/, message: "exec() with user input — code execution" },
+    ],
+  },
+  {
+    id: "PY-002",
+    name: "Unsafe deserialization (Python)",
+    description: "Deserializing untrusted data enables arbitrary code execution",
+    severity: "critical",
+    category: "Python Security",
+    cwe: ["CWE-502"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /marshal\.loads?\s*\(/, message: "marshal.loads — code execution risk with untrusted data" },
+      { pattern: /jsonpickle\.decode\s*\(/, message: "jsonpickle.decode — code execution risk with untrusted data" },
+    ],
+  },
+  {
+    id: "PY-003",
+    name: "Unsafe YAML load",
+    description: "yaml.load without SafeLoader enables code execution",
+    severity: "critical",
+    category: "Python Security",
+    cwe: ["CWE-502"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /yaml\.load\s*\((?![\s\S]{0,50}Loader\s*=\s*(?:yaml\.)?SafeLoader)/, message: "yaml.load without SafeLoader — use yaml.safe_load" },
+    ],
+  },
+  {
+    id: "PY-004",
+    name: "SQL injection in Python",
+    description: "String formatting in SQL enables injection attacks",
+    severity: "critical",
+    category: "Python Security",
+    cwe: ["CWE-89"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /\.execute\s*\(\s*f["']/, message: "f-string in SQL execute — use parameterized query" },
+      { pattern: /\.execute\s*\(\s*["'][\s\S]{0,50}\.format\s*\(/, message: ".format() in SQL — use parameterized query" },
+      { pattern: /\.execute\s*\(\s*["'][\s\S]{0,50}%s[\s\S]{0,30}%\s*\(/, message: "% formatting in SQL — use parameterized query" },
+    ],
+  },
+  {
+    id: "PY-005",
+    name: "Command injection in Python",
+    description: "Shell command with user input enables injection",
+    severity: "critical",
+    category: "Python Security",
+    cwe: ["CWE-78"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /os\.system\s*\(\s*(?:f["']|.*\+|.*format|.*request\.)/, message: "os.system with dynamic input — command injection" },
+      { pattern: /subprocess\.(?:call|run|Popen)\s*\([\s\S]{0,50}shell\s*=\s*True/, message: "subprocess with shell=True — injection risk" },
+    ],
+  },
+  {
+    id: "PY-006",
+    name: "Jinja2 SSTI",
+    description: "Template with user input enables Server-Side Template Injection",
+    severity: "critical",
+    category: "Python Security",
+    cwe: ["CWE-94"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /render_template_string\s*\(\s*(?:request\.|user)/, message: "render_template_string with user input — SSTI" },
+      { pattern: /Template\s*\(\s*(?:request\.|user_input|data)/, message: "Jinja2 Template with user input — SSTI" },
+    ],
+  },
+  {
+    id: "PY-007",
+    name: "Hardcoded SECRET_KEY",
+    description: "Django/Flask SECRET_KEY hardcoded in source",
+    severity: "critical",
+    category: "Python Security",
+    cwe: ["CWE-22"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /SECRET_KEY\s*=\s*["'][^"']{8,}["']/, message: "Hardcoded SECRET_KEY — use environment variable" },
+    ],
+  },
+  {
+    id: "PY-008",
+    name: "Debug mode in production",
+    description: "DEBUG=True exposes sensitive info in error pages",
+    severity: "high",
+    category: "Python Security",
+    cwe: ["CWE-918"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /DEBUG\s*=\s*True/, message: "Debug mode enabled — disable in production" },
+    ],
+  },
+  {
+    id: "PY-009",
+    name: "Path traversal in Python",
+    description: "open() with user-supplied path allows reading arbitrary files",
+    severity: "high",
+    category: "Python Security",
+    cwe: ["CWE-22"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /open\s*\(\s*(?:request\.|os\.path\.join\s*\([\s\S]{0,30}request\.)/, message: "File open with user-controlled path — path traversal" },
+    ],
+  },
+  {
+    id: "PY-010",
+    name: "SSRF in Python",
+    description: "HTTP request to user-controlled URL enables SSRF",
+    severity: "high",
+    category: "Python Security",
+    cwe: ["CWE-918"],
+    filePatterns: ["**/*.py"],
+    badPatterns: [
+      { pattern: /requests\.(?:get|post|put|delete)\s*\(\s*(?:request\.|user_input|data\[)/, message: "HTTP request to user-controlled URL — SSRF" },
+    ],
+  },
+];
+
+// ─── CI/CD Security ──────────────────────────────────────────
+
+export const cicdSecurityRules: Rule[] = [
+  {
+    id: "CICD-001",
+    name: "Secret in GitHub Actions workflow",
+    description: "Hardcoded secrets in workflow files — use GitHub Secrets",
+    severity: "critical",
+    category: "CI/CD Security",
+    cwe: ["CWE-78"],
+    filePatterns: ["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"],
+    badPatterns: [
+      { pattern: /(?:password|secret|token|api_key)\s*:\s*["'][^$][^"']{8,}["']/i, message: "Hardcoded secret in workflow — use ${{ secrets.* }}" },
+    ],
+  },
+  {
+    id: "CICD-002",
+    name: "Untrusted input in run command",
+    description: "GitHub event data in run: enables injection",
+    severity: "critical",
+    category: "CI/CD Security",
+    cwe: ["CWE-829"],
+    filePatterns: ["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"],
+    badPatterns: [
+      { pattern: /run:[\s\S]{0,50}\$\{\{\s*github\.event\.(?:issue|pull_request|comment)\.(?:body|title)/, message: "Untrusted event data in run command — injection risk" },
+    ],
+  },
+  {
+    id: "CICD-003",
+    name: "pull_request_target with checkout",
+    description: "pull_request_target + checkout of PR code enables code execution",
+    severity: "critical",
+    category: "CI/CD Security",
+    cwe: ["CWE-798"],
+    filePatterns: ["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"],
+    badPatterns: [
+      { pattern: /pull_request_target[\s\S]{0,500}actions\/checkout[\s\S]{0,100}ref:[\s\S]{0,50}pull_request/, message: "pull_request_target with PR checkout — arbitrary code execution" },
+    ],
+  },
+  {
+    id: "CICD-004",
+    name: "Overly broad workflow permissions",
+    description: "Broad write permissions increase blast radius of compromised workflows",
+    severity: "high",
+    category: "CI/CD Security",
+    cwe: ["CWE-250"],
+    filePatterns: ["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"],
+    badPatterns: [
+      { pattern: /permissions:\s*write-all/, message: "write-all permissions — use minimal permissions" },
+    ],
+  },
+  {
+    id: "CICD-005",
+    name: "Unpinned action versions",
+    description: "Actions by tag can be replaced — pin to full SHA",
+    severity: "medium",
+    category: "CI/CD Security",
+    cwe: ["CWE-829"],
+    filePatterns: ["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"],
+    badPatterns: [
+      { pattern: /uses:\s+\w+\/\w+@v\d+\s*$/, message: "Action pinned to tag — pin to full commit SHA" },
+    ],
+  },
+  {
+    id: "CICD-006",
+    name: "Docker FROM not pinned",
+    description: "Docker images should be pinned to digest, not latest",
+    severity: "medium",
+    category: "CI/CD Security",
+    cwe: ["CWE-1104"],
+    filePatterns: ["**/Dockerfile"],
+    badPatterns: [
+      { pattern: /FROM\s+\w+(?:\/\w+)?:latest/, message: "Docker FROM using :latest — pin to specific version" },
+      { pattern: /FROM\s+\w+(?:\/\w+)?\s*$/, message: "Docker FROM without tag — pin to specific version" },
+    ],
+  },
+  {
+    id: "CICD-007",
+    name: "Secret in Jenkinsfile",
+    description: "Hardcoded credentials in Jenkins pipeline",
+    severity: "critical",
+    category: "CI/CD Security",
+    cwe: ["CWE-798"],
+    filePatterns: ["**/Jenkinsfile"],
+    badPatterns: [
+      { pattern: /(?:password|secret|token|apiKey)\s*=\s*["'][^$][^"']{8,}["']/i, message: "Hardcoded secret in Jenkinsfile — use credentials()" },
+    ],
+  },
+  {
+    id: "CICD-008",
+    name: "Environment variable injection",
+    description: "Writing untrusted input to GITHUB_ENV enables injection",
+    severity: "high",
+    category: "CI/CD Security",
+    cwe: ["CWE-78"],
+    filePatterns: ["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"],
+    badPatterns: [
+      { pattern: /GITHUB_ENV[\s\S]{0,50}\$\{\{\s*github\.event/, message: "Writing event data to GITHUB_ENV — injection risk" },
+    ],
+  },
+];
+
+// ─── Infrastructure as Code ──────────────────────────────────
+
+export const iacRules: Rule[] = [
+  {
+    id: "IAC-001",
+    name: "Terraform provider credentials",
+    description: "Cloud credentials hardcoded in Terraform files",
+    severity: "critical",
+    category: "Infrastructure as Code",
+    cwe: ["CWE-798"],
+    filePatterns: ["**/*.tf", "**/*.tfvars"],
+    badPatterns: [
+      { pattern: /(?:access_key|secret_key)\s*=\s*"[^"]{8,}"/, message: "Hardcoded cloud credentials in Terraform" },
+    ],
+  },
+  {
+    id: "IAC-002",
+    name: "Public database access",
+    description: "Database publicly accessible from internet",
+    severity: "critical",
+    category: "Infrastructure as Code",
+    cwe: ["CWE-284"],
+    filePatterns: ["**/*.tf"],
+    badPatterns: [
+      { pattern: /publicly_accessible\s*=\s*true/, message: "Database publicly accessible — restrict to VPC" },
+    ],
+  },
+  {
+    id: "IAC-003",
+    name: "Overly broad IAM policy",
+    description: "IAM policy with wildcard actions/resources grants excessive permissions",
+    severity: "high",
+    category: "Infrastructure as Code",
+    cwe: ["CWE-269"],
+    filePatterns: ["**/*.tf", "**/*.json"],
+    badPatterns: [
+      { pattern: /"Action"\s*:\s*"\*"/, message: "IAM wildcard Action — use least privilege" },
+      { pattern: /actions\s*=\s*\[\s*"\*"\s*\]/, message: "Terraform IAM wildcard actions" },
+    ],
+  },
+  {
+    id: "IAC-004",
+    name: "Security group open to world",
+    description: "Ingress from 0.0.0.0/0 on non-standard ports",
+    severity: "high",
+    category: "Infrastructure as Code",
+    cwe: ["CWE-284"],
+    filePatterns: ["**/*.tf"],
+    badPatterns: [
+      { pattern: /cidr_blocks\s*=\s*\[\s*"0\.0\.0\.0\/0"\s*\][\s\S]{0,100}(?!(?:from_port\s*=\s*(?:80|443)\b))/, message: "Security group open to 0.0.0.0/0 on non-HTTP port" },
+    ],
+  },
+  {
+    id: "IAC-005",
+    name: "Unencrypted storage",
+    description: "Storage resource without encryption enabled",
+    severity: "medium",
+    category: "Infrastructure as Code",
+    cwe: ["CWE-311"],
+    filePatterns: ["**/*.tf"],
+    badPatterns: [
+      { pattern: /resource\s*"aws_s3_bucket"\s*[\s\S]{0,500}(?!server_side_encryption|encryption)/, message: "S3 bucket without encryption configuration" },
+    ],
+  },
+  {
+    id: "IAC-006",
+    name: "Unencrypted transport",
+    description: "Load balancer listener without SSL/TLS",
+    severity: "high",
+    category: "Infrastructure as Code",
+    cwe: ["CWE-319"],
+    filePatterns: ["**/*.tf"],
+    badPatterns: [
+      { pattern: /protocol\s*=\s*"HTTP"[\s\S]{0,100}(?:lb_listener|listener)/, message: "Load balancer listener using HTTP — use HTTPS" },
+    ],
+  },
+  {
+    id: "IAC-007",
+    name: "Missing backup configuration",
+    description: "Database/storage without backup retention",
+    severity: "medium",
+    category: "Infrastructure as Code",
+    cwe: ["CWE-693"],
+    filePatterns: ["**/*.tf"],
+    badPatterns: [
+      { pattern: /resource\s*"aws_db_instance"[\s\S]{0,500}backup_retention_period\s*=\s*0/, message: "RDS with no backup retention — data loss risk" },
+    ],
+  },
+];
+
+// ─── ReDoS & Input Validation ────────────────────────────────
+
+export const redosRules: Rule[] = [
+  {
+    id: "REDOS-001",
+    name: "Catastrophic backtracking regex",
+    description: "Nested quantifiers cause exponential time on crafted input",
+    severity: "high",
+    category: "Input Validation",
+    cwe: ["CWE-1333"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.java", "**/*.go", "**/*.rb", "**/*.php"],
+    badPatterns: [
+      { pattern: /new RegExp\s*\(\s*["'][\s\S]{0,50}(?:\([^)]+\+\)\+|\([^)]+\*\)\*)/, message: "Regex with nested quantifiers — catastrophic backtracking" },
+    ],
+  },
+  {
+    id: "REDOS-002",
+    name: "User input in regex",
+    description: "User input in RegExp without escaping enables ReDoS",
+    severity: "high",
+    category: "Input Validation",
+    cwe: ["CWE-1333"],
+    filePatterns: ["**/*.ts", "**/*.js"],
+    badPatterns: [
+      { pattern: /new RegExp\s*\(\s*(?:req\.|request\.|params\.|query\.|body\.)/, message: "User input in RegExp without escaping — ReDoS risk" },
+    ],
+  },
+  {
+    id: "REDOS-003",
+    name: "Null byte injection",
+    description: "Null bytes in file/path operations bypass security checks",
+    severity: "high",
+    category: "Input Validation",
+    cwe: ["CWE-1333"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.php"],
+    badPatterns: [
+      { pattern: /(?:readFile|writeFile|open|unlink)\s*\([\s\S]{0,100}(?:req\.|request\.)[\s\S]{0,50}(?!replace\s*\(\s*\/\\0|\.replace\s*\(\s*\/\x00)/, message: "File operation with user input — no null byte filtering" },
+    ],
+  },
+  {
+    id: "REDOS-004",
+    name: "CRLF injection",
+    description: "User input in HTTP headers without newline stripping",
+    severity: "high",
+    category: "Input Validation",
+    cwe: ["CWE-93"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.java", "**/*.go", "**/*.php"],
+    badPatterns: [
+      { pattern: /setHeader\s*\(\s*["'][^"']+["']\s*,\s*(?:req\.|request\.|params\.)/, message: "User input in HTTP header — CRLF injection risk" },
+      { pattern: /res\.header\s*\(\s*["'][^"']+["']\s*,\s*(?:req\.|request\.)/, message: "User input in response header" },
+    ],
+  },
+  {
+    id: "REDOS-005",
+    name: "XML External Entity (XXE)",
+    description: "XML parser without disabling external entities enables XXE",
+    severity: "critical",
+    category: "Input Validation",
+    cwe: ["CWE-611"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.java", "**/*.go", "**/*.php"],
+    badPatterns: [
+      { pattern: /XMLParser\s*\([\s\S]{0,100}(?!noent|NOENT|resolve_entities\s*=\s*False|disallow-doctype-decl)/, message: "XML parser without external entity protection — XXE risk" },
+      { pattern: /DocumentBuilderFactory[\s\S]{0,200}(?!setFeature|FEATURE_SECURE_PROCESSING)/, message: "Java XML parser without XXE protection" },
+      { pattern: /etree\.parse\s*\([\s\S]{0,50}(?!resolve_entities\s*=\s*False)/, message: "Python XML parse without disabling entities" },
+    ],
+  },
+  {
+    id: "REDOS-006",
+    name: "Template injection",
+    description: "User input directly in template engines enables SSTI/XSS",
+    severity: "critical",
+    category: "Input Validation",
+    cwe: ["CWE-1336"],
+    filePatterns: ["**/*.ts", "**/*.js", "**/*.py", "**/*.rb"],
+    badPatterns: [
+      { pattern: /\.compile\s*\(\s*(?:req\.|request\.|user|body\.)/, message: "Template compilation with user input — SSTI" },
+      { pattern: /Handlebars\.compile\s*\(\s*(?:req\.|request\.)/, message: "Handlebars template with user input" },
+      { pattern: /ejs\.render\s*\(\s*(?:req\.|request\.|body\.)/, message: "EJS render with user input" },
     ],
   },
 ];
@@ -1171,4 +3913,24 @@ export const allRules: Rule[] = [
   ...memorySafetyRules,
   ...concurrencyRules,
   ...dependencyRules,
+  ...cloudRules,
+  ...apiSecurityRules,
+  ...cryptoRules,
+  ...sessionRules,
+  ...errorHandlingRules,
+  ...networkSecurityRules,
+  ...configSecurityRules,
+  ...fileSecurityRules,
+  ...privacyRules,
+  ...dbSecurityRules,
+  ...supplyChainRules,
+  ...smartContractRules,
+  ...iosSecurityRules,
+  ...goSecurityRules,
+  ...phpSecurityRules,
+  ...rubySecurityRules,
+  ...pythonSecurityRules,
+  ...cicdSecurityRules,
+  ...iacRules,
+  ...redosRules,
 ];

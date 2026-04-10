@@ -54,11 +54,23 @@ function collectFiles(dir: string, patterns: string[]): string[] {
 
       // Skip common non-source directories
       if (entry.isDirectory()) {
-        if (
-          ["node_modules", ".git", "build", "target", ".gradle", ".idea", ".cxx", "dist", "__tests__", "test", "tests"].includes(
-            entry.name
-          )
-        ) {
+        const skipDirs = new Set([
+          // Build & dependency dirs
+          "node_modules", ".git", "build", "target", ".gradle", ".idea", ".cxx", "dist", "out",
+          // Test directories
+          "__tests__", "test", "tests", "Tests", "androidTest", "benchmarkShared", "testFixtures",
+          "androidBenchmark", "androidInstrumentedTest", "commonTest", "jvmTest",
+          // Third-party / vendor / generated / submodules
+          "vendor", "third_party", "thirdparty", "third-party", "external", "generated", "proto",
+          "submodules", "Submodules",
+          // Demo / sample / e2e
+          "demo", "sample", "samples", "example", "examples", "fixtures", "e2e", "cypress", "playwright",
+          // Assets (bundled JS like ace.min.js)
+          "assets",
+          // Development environment / tooling
+          "devenv", "testdata", "testing", "test-plugins",
+        ]);
+        if (skipDirs.has(entry.name) || entry.name.startsWith("e2e-") || entry.name.startsWith("__")) {
           continue;
         }
         walk(fullPath);
@@ -90,10 +102,16 @@ function scanFile(filePath: string, content: string, rules: Rule[], projectDir: 
   for (const rule of rules) {
     // Check bad patterns
     if (rule.badPatterns) {
+      let ruleFindingsCount = 0;
+      const maxFindingsPerRule = 5; // Cap findings per rule per file to avoid noise
+
       for (const bp of rule.badPatterns) {
+        if (ruleFindingsCount >= maxFindingsPerRule) break;
+
         for (let i = 0; i < lines.length; i++) {
-          // Check individual lines
-          if (bp.pattern.test(lines[i])) {
+          if (ruleFindingsCount >= maxFindingsPerRule) break;
+          // Check individual lines (skip lines with suppression annotations)
+          if (bp.pattern.test(lines[i]) && !/(?:#nosec|nolint|NOSONAR|NOLINT|nosec|@suppress)/.test(lines[i])) {
             findings.push({
               ruleId: rule.id,
               ruleName: rule.name,
@@ -104,35 +122,45 @@ function scanFile(filePath: string, content: string, rules: Rule[], projectDir: 
               line: i + 1,
               snippet: lines[i].trim().substring(0, 120),
             });
+            ruleFindingsCount++;
           }
         }
 
         // Also check multi-line patterns (across whole file)
+        // Only if the pattern actually uses cross-line matching AND we haven't already found
+        // this rule+pattern on single-line scan (to avoid duplicates)
         const source = bp.pattern.source;
         if (source.includes("[\\s\\S]") || source.includes("[\\S\\s]")) {
-          // Multi-line pattern — run against chunks of content
-          const chunkSize = 2000;
-          for (let offset = 0; offset < content.length; offset += chunkSize - 500) {
-            const chunk = content.substring(offset, offset + chunkSize);
-            if (bp.pattern.test(chunk)) {
-              // Find approximate line number
-              const beforeChunk = content.substring(0, offset);
-              const approxLine = beforeChunk.split("\n").length;
-              // Avoid duplicate findings
-              const isDuplicate = findings.some(
-                (f) => f.ruleId === rule.id && f.file === relPath && Math.abs(f.line - approxLine) < 10
-              );
-              if (!isDuplicate) {
-                findings.push({
-                  ruleId: rule.id,
-                  ruleName: rule.name,
-                  severity: rule.severity,
-                  category: rule.category,
-                  message: bp.message,
-                  file: relPath,
-                  line: approxLine,
-                  snippet: chunk.substring(0, 120).replace(/\n/g, " ").trim(),
-                });
+          const alreadyFoundForThisPattern = findings.some(
+            (f) => f.ruleId === rule.id && f.file === relPath && f.message === bp.message
+          );
+          if (!alreadyFoundForThisPattern) {
+            // Multi-line pattern — run against chunks of content
+            const chunkSize = 2000;
+            let multiLineFindings = 0;
+            const maxMultiLinePerPattern = 3; // Cap to avoid flood from repetitive code
+            for (let offset = 0; offset < content.length && multiLineFindings < maxMultiLinePerPattern; offset += chunkSize - 500) {
+              const chunk = content.substring(offset, offset + chunkSize);
+              if (bp.pattern.test(chunk)) {
+                const beforeChunk = content.substring(0, offset);
+                const approxLine = beforeChunk.split("\n").length;
+                // Wider dedup window (50 lines) to avoid repeated findings in similar code
+                const isDuplicate = findings.some(
+                  (f) => f.ruleId === rule.id && f.file === relPath && Math.abs(f.line - approxLine) < 50
+                );
+                if (!isDuplicate) {
+                  findings.push({
+                    ruleId: rule.id,
+                    ruleName: rule.name,
+                    severity: rule.severity,
+                    category: rule.category,
+                    message: bp.message,
+                    file: relPath,
+                    line: approxLine,
+                    snippet: chunk.substring(0, 120).replace(/\n/g, " ").trim(),
+                  });
+                  multiLineFindings++;
+                }
               }
             }
           }
@@ -159,6 +187,23 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
   const allFindings: Finding[] = [];
 
   for (const file of files) {
+    const fileName = path.basename(file);
+
+    // Skip minified files — they are third-party code, not user source
+    if (fileName.includes(".min.") || fileName.endsWith("-min.js") || fileName.endsWith("-min.css")) {
+      continue;
+    }
+
+    // Skip preview/mock/fake/test data files — they contain intentional dummy data
+    if (/(?:Preview|Mock|Fake|Dummy|Stub|Fixture|__preview__|__mock__)/.test(fileName)) {
+      continue;
+    }
+
+    // Skip test files — they contain intentional test data, fake credentials, etc.
+    if (/_test\.go$|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|_test\.py$|_test\.rs$|Test\.java$|Test\.kt$/.test(fileName)) {
+      continue;
+    }
+
     let content: string;
     try {
       content = fs.readFileSync(file, "utf-8");
@@ -166,26 +211,49 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
       continue;
     }
 
-    // Find applicable rules for this file
-    const applicableRules = rules.filter((r) =>
-      r.filePatterns.some((p) => {
-        const fileName = path.basename(file);
-        if (p.startsWith("**/")) {
-          const rest = p.slice(3);
-          if (rest.includes("*")) {
-            const regex = new RegExp("^" + rest.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$");
-            return regex.test(fileName);
-          }
-          return fileName === rest || file.endsWith(rest);
-        }
-        return fileName === p;
-      })
-    );
+    // Skip files that are too large (likely generated/bundled) — over 500KB
+    if (content.length > 500_000) {
+      continue;
+    }
+
+    // Skip files with very long lines (minified/generated code)
+    const firstFewLines = content.slice(0, 10_000).split("\n");
+    if (firstFewLines.some((line) => line.length > 1000)) {
+      continue;
+    }
+
+    // Skip auto-generated files
+    const header = content.slice(0, 500).toLowerCase();
+    if (
+      header.includes("auto-generated") ||
+      header.includes("autogenerated") ||
+      header.includes("do not edit") ||
+      header.includes("generated by") ||
+      header.includes("this file is generated")
+    ) {
+      continue;
+    }
 
     // Allow files to opt out of scanning with a sentinel comment
     if (content.startsWith("// sentinel-kb-ignore-file") || content.includes("\n// sentinel-kb-ignore-file")) {
       continue;
     }
+
+    // Find applicable rules for this file
+    const applicableRules = rules.filter((r) =>
+      r.filePatterns.some((p) => {
+        const fn = path.basename(file);
+        if (p.startsWith("**/")) {
+          const rest = p.slice(3);
+          if (rest.includes("*")) {
+            const regex = new RegExp("^" + rest.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$");
+            return regex.test(fn);
+          }
+          return fn === rest || file.endsWith(rest);
+        }
+        return fn === p;
+      })
+    );
 
     if (applicableRules.length > 0) {
       const findings = scanFile(file, content, applicableRules, projectDir);
