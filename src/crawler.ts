@@ -4,6 +4,9 @@
 
 import * as https from "https";
 import * as http from "http";
+import * as fs from "fs";
+import * as path from "path";
+import { execSync } from "child_process";
 
 export interface DiscoveredReport {
   id: string;
@@ -14,13 +17,24 @@ export interface DiscoveredReport {
   year: number;
 }
 
+// GitHub token raises rate limit from 60 to 5000 req/h (optional)
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
+
+function githubHeaders(): Record<string, string> {
+  const h: Record<string, string> = { "User-Agent": "security-audit-kb/0.1", Accept: "application/json" };
+  if (GITHUB_TOKEN) h["Authorization"] = `token ${GITHUB_TOKEN}`;
+  return h;
+}
+
 /** Fetch text from URL, following redirects */
 function fetchText(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const doRequest = (currentUrl: string, depth: number) => {
       if (depth > 10) { reject(new Error("Too many redirects")); return; }
+      const isGitHub = currentUrl.includes("github.com") || currentUrl.includes("githubusercontent.com");
+      const headers = isGitHub ? githubHeaders() : { "User-Agent": "security-audit-kb/0.1", Accept: "application/json" };
       const c = currentUrl.startsWith("https") ? https : http;
-      c.get(currentUrl, { headers: { "User-Agent": "security-audit-kb/0.1", Accept: "application/json" } }, (res) => {
+      c.get(currentUrl, { headers }, (res) => {
         if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume();
           const loc = res.headers.location;
@@ -81,90 +95,142 @@ function makeId(firm: string, filename: string): string {
 // ─────────────────────────────────────────────────────────────
 // Source 1: Master repo — 83 audit firms
 // github.com/juliocesarfort/public-pentesting-reports
+//
+// Strategy: git clone --depth 1 (no API rate limit) with fallback to API.
+// Clone uses SSH if available, HTTPS otherwise.
 // ─────────────────────────────────────────────────────────────
 
 const MASTER_REPO = "juliocesarfort/public-pentesting-reports";
 const MASTER_API = `https://api.github.com/repos/${MASTER_REPO}/contents`;
-
-/** Get list of all firm directories in master repo */
-async function getMasterFirms(): Promise<{ name: string; path: string }[]> {
-  const contents = await fetchJson(MASTER_API);
-  return contents
-    .filter((item: any) => item.type === "dir")
-    .map((item: any) => ({ name: item.name, path: item.path }));
-}
+const MASTER_CLONE_SSH = `git@github.com:${MASTER_REPO}.git`;
+const MASTER_CLONE_HTTPS = `https://github.com/${MASTER_REPO}.git`;
 
 /** Sleep helper */
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Get all PDF files from a firm's directory with retry on rate limit */
-async function getFirmPdfs(firmPath: string): Promise<{ name: string; download_url: string }[]> {
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const contents = await fetchJson(`${MASTER_API}/${encodeURIComponent(firmPath)}`);
-      return contents
-        .filter((item: any) => item.type === "file" && item.name.toLowerCase().endsWith(".pdf"))
-        .map((item: any) => ({ name: item.name, download_url: item.download_url }));
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes("403") && attempt < MAX_RETRIES) {
-        const delay = (attempt + 1) * 5000; // 5s, 10s, 15s
-        console.error(`[sentinel-kb] Rate limited on ${firmPath}, retrying in ${delay / 1000}s...`);
-        await sleep(delay);
-        continue;
-      }
-      console.error(`[sentinel-kb] Failed to crawl firm ${firmPath}: ${msg}`);
-      return [];
+/**
+ * Clone repo (no checkout) and use `git ls-tree` to list PDF files.
+ * Downloads 0 bytes of PDF content — just the tree metadata.
+ */
+function crawlViaGitClone(repoUrl: string, label: string, owner: string): DiscoveredReport[] {
+  const cacheDir = path.join(process.env.HOME || "/tmp", ".security-audit-kb", ".clone-cache");
+  const tmpDir = path.join(cacheDir, label);
+  const reports: DiscoveredReport[] = [];
+
+  try {
+    fs.mkdirSync(cacheDir, { recursive: true });
+
+    if (fs.existsSync(path.join(tmpDir, "HEAD")) || fs.existsSync(path.join(tmpDir, ".git"))) {
+      // Already cloned — fetch latest
+      const gitDir = fs.existsSync(path.join(tmpDir, "HEAD")) ? tmpDir : path.join(tmpDir, ".git");
+      execSync(`git --git-dir="${gitDir}" fetch --depth 1 origin 2>/dev/null || true`, { timeout: 30000, stdio: "pipe" });
+    } else {
+      // Bare clone — no file checkout, just tree objects
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      execSync(`git clone --bare --depth 1 "${repoUrl}" "${tmpDir}"`, { timeout: 60000, stdio: "pipe" });
     }
+
+    // List all files via git ls-tree (no checkout needed)
+    const gitDir = fs.existsSync(path.join(tmpDir, "HEAD")) ? tmpDir : path.join(tmpDir, ".git");
+    const output = execSync(`git --git-dir="${gitDir}" ls-tree -r --name-only HEAD`, { timeout: 15000, stdio: "pipe", maxBuffer: 10 * 1024 * 1024 }).toString();
+
+    for (const line of output.split("\n")) {
+      if (!line.toLowerCase().endsWith(".pdf")) continue;
+      const parts = line.split("/");
+      if (parts.length < 2) continue;
+      const firmName = parts[0];
+      const pdfName = parts[parts.length - 1];
+      const downloadUrl = `https://raw.githubusercontent.com/${owner}/main/${parts.map(encodeURIComponent).join("/")}`;
+      reports.push({
+        id: makeId(firmName, pdfName),
+        firm: firmName.replace(/([a-z])([A-Z])/g, "$1 $2"),
+        target: filenameToTarget(pdfName),
+        url: downloadUrl,
+        filename: pdfName,
+        year: extractYear(pdfName),
+      });
+    }
+  } catch (err: any) {
+    console.error(`[sentinel-kb] Git clone failed for ${label}: ${err.message}`);
   }
-  return [];
+
+  return reports;
 }
 
-/**
- * Crawl the master repo — all 83 firms.
- * Rate-limited: ~30 API calls.
- */
-export async function crawlMasterRepo(progress?: (msg: string) => void): Promise<DiscoveredReport[]> {
+/** Crawl master repo via API (fallback when git is unavailable) */
+async function crawlMasterRepoViaAPI(progress?: (msg: string) => void): Promise<DiscoveredReport[]> {
   const reports: DiscoveredReport[] = [];
   const log = progress || console.log;
 
   try {
-    const firms = await getMasterFirms();
-    log(`  Found ${firms.length} firms in master repo`);
+    const contents = await fetchJson(MASTER_API);
+    const firms = contents
+      .filter((item: any) => item.type === "dir")
+      .map((item: any) => ({ name: item.name, path: item.path }));
+    log(`  Found ${firms.length} firms via API`);
 
-    // Process in batches of 3 with pauses to avoid GitHub rate limits
     for (let i = 0; i < firms.length; i += 3) {
       const batch = firms.slice(i, i + 3);
       const results = await Promise.all(
-        batch.map(async (firm) => {
-          const pdfs = await getFirmPdfs(firm.path);
-          return pdfs.map((pdf) => ({
-            id: makeId(firm.name, pdf.name),
-            firm: firm.name.replace(/([a-z])([A-Z])/g, "$1 $2"), // CamelCase → spaces
-            target: filenameToTarget(pdf.name),
-            url: pdf.download_url,
-            filename: pdf.name,
-            year: extractYear(pdf.name),
-          }));
+        batch.map(async (firm: { name: string; path: string }) => {
+          try {
+            const pdfs = await fetchJson(`${MASTER_API}/${encodeURIComponent(firm.path)}`);
+            return pdfs
+              .filter((item: any) => item.type === "file" && item.name.toLowerCase().endsWith(".pdf"))
+              .map((item: any) => ({
+                id: makeId(firm.name, item.name),
+                firm: firm.name.replace(/([a-z])([A-Z])/g, "$1 $2"),
+                target: filenameToTarget(item.name),
+                url: item.download_url,
+                filename: item.name,
+                year: extractYear(item.name),
+              }));
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            console.error(`[sentinel-kb] Failed to crawl firm ${firm.path}: ${msg}`);
+            return [];
+          }
         })
       );
-      for (const firmReports of results) {
-        reports.push(...firmReports);
-      }
-
-      // Pause between batches to respect GitHub rate limits
-      if (i + 3 < firms.length) {
-        await sleep(2000);
-      }
+      for (const firmReports of results) reports.push(...firmReports);
+      if (i + 3 < firms.length) await sleep(2000);
     }
   } catch (err: any) {
-    log(`  Failed to crawl master repo: ${err.message}`);
+    log(`  Failed to crawl master repo via API: ${err.message}`);
   }
 
   return reports;
+}
+
+/**
+ * Crawl the master repo — all 83 firms.
+ * Tries git clone first (no rate limit), falls back to API.
+ */
+export async function crawlMasterRepo(progress?: (msg: string) => void): Promise<DiscoveredReport[]> {
+  const log = progress || console.log;
+
+  // Try git clone first — no API rate limit
+  let hasGit = false;
+  try { execSync("git --version", { stdio: "pipe" }); hasGit = true; } catch {}
+
+  if (hasGit) {
+    // Try SSH first, then HTTPS
+    log(`  Using git clone (no API rate limit)...`);
+    let reports = crawlViaGitClone(MASTER_CLONE_SSH, "master-repo", MASTER_REPO);
+    if (reports.length === 0) {
+      log(`  SSH clone failed, trying HTTPS...`);
+      reports = crawlViaGitClone(MASTER_CLONE_HTTPS, "master-repo", MASTER_REPO);
+    }
+    if (reports.length > 0) {
+      log(`  Found ${reports.length} reports from ${new Set(reports.map(r => r.firm)).size} firms`);
+      return reports;
+    }
+    log(`  Git clone returned 0 reports, falling back to API...`);
+  }
+
+  return crawlMasterRepoViaAPI(progress);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -172,34 +238,41 @@ export async function crawlMasterRepo(progress?: (msg: string) => void): Promise
 // ─────────────────────────────────────────────────────────────
 
 export async function crawlTrailOfBits(): Promise<DiscoveredReport[]> {
+  // Try git clone first
+  let hasGit = false;
+  try { execSync("git --version", { stdio: "pipe" }); hasGit = true; } catch {}
+
+  if (hasGit) {
+    const cloneReports = crawlViaGitClone("git@github.com:trailofbits/publications.git", "tob-publications", "trailofbits/publications");
+    // Filter to only reviews/ directory
+    const reviews = cloneReports.filter((r) => r.url.includes("/reviews/"));
+    if (reviews.length > 0) return reviews;
+
+    // Try HTTPS
+    const httpsReports = crawlViaGitClone("https://github.com/trailofbits/publications.git", "tob-publications", "trailofbits/publications");
+    const httpsReviews = httpsReports.filter((r) => r.url.includes("/reviews/"));
+    if (httpsReviews.length > 0) return httpsReviews;
+  }
+
+  // Fallback to API
   const reports: DiscoveredReport[] = [];
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const contents = await fetchJson(
-        "https://api.github.com/repos/trailofbits/publications/contents/reviews"
-      );
-      for (const item of contents) {
-        if (!item.name.endsWith(".pdf")) continue;
-        reports.push({
-          id: makeId("tob", item.name),
-          firm: "Trail of Bits",
-          target: filenameToTarget(item.name),
-          url: item.download_url,
-          filename: item.name,
-          year: extractYear(item.name),
-        });
-      }
-      break;
-    } catch (err: any) {
-      if (err.message.includes("403") && attempt < MAX_RETRIES) {
-        const delay = (attempt + 1) * 5000;
-        console.error(`  Trail of Bits rate limited, retrying in ${delay / 1000}s...`);
-        await sleep(delay);
-        continue;
-      }
-      console.error(`  Failed to crawl Trail of Bits: ${err.message}`);
+  try {
+    const contents = await fetchJson(
+      "https://api.github.com/repos/trailofbits/publications/contents/reviews"
+    );
+    for (const item of contents) {
+      if (!item.name.endsWith(".pdf")) continue;
+      reports.push({
+        id: makeId("tob", item.name),
+        firm: "Trail of Bits",
+        target: filenameToTarget(item.name),
+        url: item.download_url,
+        filename: item.name,
+        year: extractYear(item.name),
+      });
     }
+  } catch (err: any) {
+    console.error(`  Failed to crawl Trail of Bits: ${err.message}`);
   }
   return reports;
 }
