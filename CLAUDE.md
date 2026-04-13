@@ -40,7 +40,7 @@ SQLite at `~/.security-audit-kb/audit.db` (WAL mode, FTS5):
 - `model_runs` — per-run cost/performance aggregates
 - `findings_fts` — full-text search (porter stemmer, unicode)
 
-Current: ~2,100 findings from 361 PDFs, 58 firms.
+Current: ~15,800 findings from 929 PDFs, 85 firms.
 
 ## Key commands
 

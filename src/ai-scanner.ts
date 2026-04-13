@@ -1,5 +1,5 @@
 // AI-powered security scanner
-// Uses knowledge base (8900+ real audit findings) + Claude to analyze code
+// Uses knowledge base (15800+ real audit findings) + Claude to analyze code
 // Not regex — AI understands logic, data flow, and real vulnerability patterns
 
 import * as fs from "fs";
@@ -368,7 +368,7 @@ export function formatAIReport(report: AIScanReport): string {
 
   lines.push("═══════════════════════════════════════════════════════════════");
   lines.push("  Sentinel-KB AI Security Audit");
-  lines.push("  Powered by Claude + 8,900+ real audit findings");
+  lines.push("  Powered by Claude + 15,800+ real audit findings");
   lines.push("═══════════════════════════════════════════════════════════════");
   lines.push(`  Project:        ${report.projectPath}`);
   lines.push(`  Date:           ${report.timestamp}`);

@@ -5,7 +5,7 @@ description: Search the vulnerability knowledge base for specific patterns, CVEs
 
 Search the sentinel-kb vulnerability knowledge base using the `search-kb` MCP tool.
 
-The KB contains 8,900+ real findings from 360+ PDF audit reports by 58 professional security firms.
+The KB contains 15,800+ real findings from 920+ PDF audit reports by 85 professional security firms.
 
 Pass `$ARGUMENTS` as the search query. Present results grouped by severity, showing:
 - Finding title and severity

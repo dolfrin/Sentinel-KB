@@ -4,7 +4,7 @@
 
 ## What Sentinel-KB does
 
-Sentinel-KB is a security vulnerability scanner that can run as a Claude Code plugin, CLI tool, or MCP server. It performs local static analysis, optional hosted knowledge base lookups, and optional AI-powered analysis.
+Sentinel-KB is a security vulnerability scanner that can run as a Claude Code plugin, CLI tool, or MCP server. It performs local static analysis, optional hosted knowledge base lookups, and AI-assisted analysis depending on how you use it.
 
 ## Data flows
 
@@ -13,6 +13,11 @@ Sentinel-KB is a security vulnerability scanner that can run as a Claude Code pl
 - No code, files, or scan results leave your device
 - No data is collected, stored, or transmitted
 
+### Claude Code plugin usage
+- When you use Sentinel-KB inside Claude Code, Claude Code itself may read and analyze files from your workspace as part of the normal Claude Code product experience
+- Sentinel-KB does not require you to provide a separate `ANTHROPIC_API_KEY` for normal Claude Code plugin usage
+- The plugin's own hosted features are limited to knowledge base lookups such as KB search and stats
+
 ### Knowledge base API (`kb.quantumwing.io`)
 - When you use KB search or KB stats features, the client sends search queries or metadata requests to the hosted knowledge base API
 - We log request metadata such as IP address, timestamp, endpoint path, and response time for abuse prevention, reliability, and rate limiting
@@ -20,11 +25,12 @@ Sentinel-KB is a security vulnerability scanner that can run as a Claude Code pl
 - We do **not** collect, store, or transmit any of your source code
 - No cookies, no tracking, no analytics
 
-### AI-powered scan (`ANTHROPIC_API_KEY`)
-- If you explicitly run AI scan features, relevant source code excerpts and knowledge base context are sent to Anthropic's API for analysis
+### Standalone AI scan / extraction (`ANTHROPIC_API_KEY`)
+- If you run Sentinel-KB outside Claude Code using the standalone CLI or MCP server AI features, and you explicitly enable AI scan or AI extraction, relevant source code excerpts or report text may be sent to Anthropic's API for analysis
+- This standalone AI path uses `ANTHROPIC_API_KEY`
 - This does not happen during static scan
 - Anthropic processes those requests under Anthropic's own terms and privacy practices
-- You are responsible for deciding whether the code you send to Anthropic may be processed by a third-party AI provider
+- You are responsible for deciding whether the code or report content you send to Anthropic may be processed by a third-party AI provider
 
 ## Data storage
 
@@ -34,7 +40,8 @@ Sentinel-KB is a security vulnerability scanner that can run as a Claude Code pl
 
 ## Third parties
 
-- Anthropic may process source code excerpts only when you use AI scan features
+- Claude Code usage is governed by Anthropic's Claude Code product terms and privacy practices
+- Anthropic may process source code excerpts or report text when you use Claude Code itself, or when you explicitly enable Sentinel-KB's standalone AI features
 - The hosted knowledge base API runs on infrastructure operated by the project maintainer
 - We do not sell your data or use it for advertising
 

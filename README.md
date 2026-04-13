@@ -14,7 +14,7 @@
 
 ---
 
-Sentinel-KB scans codebases for security vulnerabilities using **287 static analysis rules** and a **knowledge base of 8,900+ real findings** extracted from 360+ audit reports published by 58 professional security firms -- Trail of Bits, Cure53, NCC Group, QuarksLab, and more.
+Sentinel-KB scans codebases for security vulnerabilities using **287 static analysis rules** and a **knowledge base of 15,800+ real findings** extracted from 920+ audit reports published by 85 professional security firms -- Trail of Bits, Cure53, NCC Group, QuarksLab, and more.
 
 Unlike synthetic rule sets, every pattern in the knowledge base traces back to a vulnerability that was found, reported, and fixed in a real-world audit. When Sentinel-KB flags something in your code, it can tell you which firm found the same class of bug, in what context, and how it was remediated.
 
@@ -67,7 +67,7 @@ npx tsx src/cli.ts stats
 | **Coverage** | 33 categories, 287 rules | Usually 5-10 categories |
 | **Languages** | TypeScript, Java, Kotlin, Rust, Go, PHP, Ruby, Python, Solidity, Swift, C/C++ | Usually 1-3 |
 | **AI analysis** | Claude analyzes code with KB context | Pattern matching only |
-| **Knowledge base** | 8,900+ findings from 58 firms | None |
+| **Knowledge base** | 15,800+ findings from 85 firms | None |
 | **False positive rate** | Tuned against real codebases | Often high |
 
 ## Static Scan Categories
@@ -112,7 +112,7 @@ The MCP server exposes six tools for programmatic access:
 | `list-rules` | List all 287 detection rules | Free |
 | `scan-file` | Scan a single file | Free |
 | `kb-stats` | Knowledge base statistics | Free |
-| `search-kb` | Full-text search across 8,900+ findings | Free |
+| `search-kb` | Full-text search across 15,800+ findings | Free |
 
 ## CLI Usage
 
@@ -152,9 +152,9 @@ npx tsx src/update.ts
                     v                         v
             +---------------+       +-----------------+
             | Regex engine  |       | Knowledge Base  |
-            | scans source  |       | 8,900+ findings  |
-            | files locally |       | 360+ reports     |
-            +-------+-------+       | 58 firms        |
+            | scans source  |       | 15,800+ findings |
+            | files locally |       | 920+ reports     |
+            +-------+-------+       | 85 firms        |
                     |               +--------+--------+
                     |                        |
                     v                        v
@@ -174,7 +174,7 @@ npx tsx src/update.ts
 
 The knowledge base is built by crawling and extracting findings from publicly available security audit reports:
 
-- **8,900+ findings** from **360+ PDF reports** by **58 audit firms**
+- **15,800+ findings** from **920+ PDF reports** by **85 audit firms**
 - Firms include Trail of Bits, Cure53, NCC Group, QuarksLab, Consensys Diligence, OpenZeppelin, and more
 - Findings are stored in SQLite with FTS5 full-text search
 - Each finding has: severity, category, CWE mapping, description, firm attribution
