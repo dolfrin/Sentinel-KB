@@ -20,13 +20,17 @@ Unlike synthetic rule sets, every pattern in the knowledge base traces back to a
 
 Works as a **Claude Code plugin**, a **CLI tool**, and an **MCP server**.
 
+Marketplace note: this repository can be installed locally as a Claude Code plugin. If an official marketplace listing is published later, installation can use the marketplace flow instead.
+
 ## Quick Start
 
 ### Claude Code Plugin (recommended)
 
 ```bash
-# Install from the Claude Code marketplace
-claude plugin add sentinel-kb
+# Clone the repo and install the plugin locally
+git clone https://github.com/dolfrin/Sentinel-KB.git
+cd Sentinel-KB
+claude plugin add .
 
 # Run a security audit on any project
 claude> /security-audit /path/to/project
@@ -229,15 +233,6 @@ Contributions are welcome. Areas where help is especially useful:
 - **Language support** -- extend file patterns and regex for additional languages
 
 Please open an issue before submitting large changes.
-
-## Support the Project
-
-If Sentinel-KB helped you find a real vulnerability or saved you audit hours, consider supporting the project. Every contribution helps fund server costs, KB expansion, and continued development.
-
-| Method | Address |
-|--------|---------|
-| EVM (any chain) | `0x00a5CDa0b5C4a1027CBc5a2A9f0D275995a3813A` |
-| Solana | `8gXiJm91Y3s7Fr9encnoD5aCgnGAX59fsfy8K5VKMPHq` |
 
 ## License
 
