@@ -2,6 +2,7 @@
 // Usage: KB_API_KEY=secret PORT=3737 npx tsx src/kb-api.ts
 
 import * as http from "http";
+import * as crypto from "crypto";
 import { getDB, type KBStats, type FindingRow } from "./db.js";
 import type { ExtractedFinding } from "./extractor.js";
 
@@ -29,19 +30,25 @@ function error(res: http.ServerResponse, message: string, status: number) {
   json(res, { error: message }, status);
 }
 
+/** Timing-safe string comparison to prevent timing attacks on API key */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
 function checkAuth(req: http.IncomingMessage, url: URL): boolean {
   if (!API_KEY) return true; // no key configured = open access
 
   // Check Bearer token
   const authHeader = req.headers.authorization || "";
-  if (authHeader.startsWith("Bearer ") && authHeader.slice(7) === API_KEY) {
-    return true;
+  if (authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    if (token.length > 0 && safeEqual(token, API_KEY)) return true;
   }
 
   // Check query param
-  if (url.searchParams.get("apiKey") === API_KEY) {
-    return true;
-  }
+  const paramKey = url.searchParams.get("apiKey") || "";
+  if (paramKey.length > 0 && safeEqual(paramKey, API_KEY)) return true;
 
   return false;
 }
@@ -145,10 +152,10 @@ const server = http.createServer((req, res) => {
     const duration = Date.now() - start;
     console.log(`${req.method} ${pathname} 200 ${duration}ms`);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    error(res, message, 500);
+    const internalMessage = err instanceof Error ? err.message : "Unknown error";
+    error(res, "Internal server error", 500);
     const duration = Date.now() - start;
-    console.log(`${req.method} ${pathname} 500 ${duration}ms — ${message}`);
+    console.log(`${req.method} ${pathname} 500 ${duration}ms — ${internalMessage}`);
   }
 });
 

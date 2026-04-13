@@ -3,6 +3,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import * as fs from "fs";
+import * as path from "path";
 import { allRules } from "./rules.js";
 import {
   runStaticScan,
@@ -13,6 +15,45 @@ import {
 } from "./service.js";
 import type { Severity } from "./rules.js";
 import type { GateConfig } from "./gate.js";
+
+// ─── Input validation ─────────────────────────────────────────
+
+/** Directories that must never be scanned — protect system and secrets */
+const BLOCKED_ROOTS = new Set(["/etc", "/var", "/usr", "/bin", "/sbin", "/boot", "/dev", "/proc", "/sys", "/root"]);
+
+function validateProjectPath(p: string): string {
+  const resolved = path.resolve(p);
+  for (const blocked of BLOCKED_ROOTS) {
+    if (resolved === blocked || resolved.startsWith(blocked + "/")) {
+      throw new Error(`Scanning system directory is not allowed: ${resolved}`);
+    }
+  }
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`Path does not exist: ${resolved}`);
+  }
+  const stat = fs.statSync(resolved);
+  if (!stat.isDirectory()) {
+    throw new Error(`Path is not a directory: ${resolved}`);
+  }
+  return resolved;
+}
+
+function validateFilePath(p: string): string {
+  const resolved = path.resolve(p);
+  for (const blocked of BLOCKED_ROOTS) {
+    if (resolved === blocked || resolved.startsWith(blocked + "/")) {
+      throw new Error(`Reading system files is not allowed: ${resolved}`);
+    }
+  }
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`File does not exist: ${resolved}`);
+  }
+  const stat = fs.statSync(resolved);
+  if (!stat.isFile()) {
+    throw new Error(`Path is not a file: ${resolved}`);
+  }
+  return resolved;
+}
 
 const server = new McpServer({
   name: "sentinel-kb",
@@ -41,7 +82,8 @@ server.tool(
   },
   async ({ projectPath, categories, severity, includeAllDirs }) => {
     try {
-      const { report, text } = runStaticScan(projectPath, {
+      const validatedPath = validateProjectPath(projectPath);
+      const { report, text } = runStaticScan(validatedPath, {
         categories: categories as string[] | undefined,
         severity: severity as Severity[] | undefined,
         includeAllDirs,
@@ -106,7 +148,8 @@ server.tool(
   },
   async ({ filePath }) => {
     try {
-      const findings = scanFile(filePath);
+      const validatedPath = validateFilePath(filePath);
+      const findings = scanFile(validatedPath);
 
       if (findings.length === 0) {
         return { content: [{ type: "text", text: `✅ No findings in ${filePath}` }] };
@@ -152,10 +195,11 @@ server.tool(
   },
   async ({ projectPath, model, maxBatches, freeLimit, upgradeUrl }) => {
     try {
+      const validatedPath = validateProjectPath(projectPath);
       const gateConfig: GateConfig | undefined =
         freeLimit !== undefined ? { freeLimit, upgradeUrl } : undefined;
 
-      const { report, text } = await runAIScan(projectPath, {
+      const { report, text } = await runAIScan(validatedPath, {
         model: model || undefined,
         maxBatches: maxBatches || undefined,
         gateConfig,

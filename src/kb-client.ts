@@ -17,6 +17,7 @@ interface CacheEntry<T> {
 const STATS_TTL_MS = 5 * 60 * 1000;   // 5 minutes
 const SEARCH_TTL_MS = 1 * 60 * 1000;  // 1 minute
 
+const MAX_CACHE_SIZE = 200;
 const cache = new Map<string, CacheEntry<unknown>>();
 
 function getCached<T>(key: string): T | null {
@@ -30,6 +31,11 @@ function getCached<T>(key: string): T | null {
 }
 
 function setCache<T>(key: string, data: T, ttlMs: number): T {
+  // Evict oldest entries if cache is full
+  if (cache.size >= MAX_CACHE_SIZE) {
+    const firstKey = cache.keys().next().value;
+    if (firstKey !== undefined) cache.delete(firstKey);
+  }
   cache.set(key, { data, expiresAt: Date.now() + ttlMs });
   return data;
 }
