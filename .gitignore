@@ -22,3 +22,6 @@ dist/
 # Signal audit materials (should not be in public repo)
 signal-android-audit.html
 signal-disclosure.md
+
+# Project docs / notes not for repo
+docs/
