@@ -176,7 +176,7 @@ server.tool(
 
 server.tool(
   "ai-audit",
-  "Run an AI-powered security audit using Claude with knowledge base context from 2000+ real audit findings. Provides deep analysis of vulnerabilities with fix recommendations.",
+  "Run an AI-powered security audit using Claude with knowledge base context from 8,900+ real audit findings. Provides deep analysis of vulnerabilities with fix recommendations.",
   {
     projectPath: z.string().describe("Absolute path to the project root directory"),
     model: z
