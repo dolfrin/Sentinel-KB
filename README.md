@@ -234,15 +234,8 @@ Please open an issue before submitting large changes.
 
 If Sentinel-KB helped you find a real vulnerability or saved you audit hours, consider supporting the project. Every contribution helps fund server costs, KB expansion, and continued development.
 
-<p align="center">
-  <a href="https://github.com/sponsors/dolfrin"><img src="https://img.shields.io/badge/GitHub_Sponsors-Support-ea4aaa?logo=github" alt="GitHub Sponsors"></a>
-  <a href="https://buymeacoffee.com/dolfrin"><img src="https://img.shields.io/badge/Buy_Me_a_Coffee-Support-ffdd00?logo=buymeacoffee&logoColor=black" alt="Buy Me a Coffee"></a>
-</p>
-
-| Method | Link |
-|--------|------|
-| GitHub Sponsors | [github.com/sponsors/dolfrin](https://github.com/sponsors/dolfrin) |
-| Buy Me a Coffee | [buymeacoffee.com/dolfrin](https://buymeacoffee.com/dolfrin) |
+| Method | Address |
+|--------|---------|
 | EVM (ETH/Base/Arb) | `0x00a5CDa0b5C4a1027CBc5a2A9f0D275995a3813A` |
 | Solana | `8gXiJm91Y3s7Fr9encnoD5aCgnGAX59fsfy8K5VKMPHq` |
 
