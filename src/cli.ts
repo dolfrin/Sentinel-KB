@@ -54,7 +54,7 @@ async function main() {
   }
 
   if (command === "stats") {
-    const stats = getStats();
+    const stats = await getStats();
 
     console.log(`\n\u2550\u2550\u2550 Knowledge Base Statistics \u2550\u2550\u2550\n`);
     console.log(`  Findings:   ${stats.total_findings}`);
@@ -114,7 +114,7 @@ async function main() {
       process.exit(1);
     }
 
-    const result = searchKB(query, { limit });
+    const result = await searchKB(query, { limit });
 
     if (args.includes("--json")) {
       console.log(JSON.stringify(result.extracted, null, 2));

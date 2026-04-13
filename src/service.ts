@@ -5,6 +5,11 @@
 import { audit, auditFile, formatReport } from "./scanner.js";
 import { aiScan, formatAIReport } from "./ai-scanner.js";
 import { getDB, closeDB } from "./db.js";
+import {
+  isRemoteKB,
+  getStats as remoteGetStats,
+  searchFindings as remoteSearchFindings,
+} from "./kb-client.js";
 import type { AuditReport, Finding } from "./scanner.js";
 import type { AIScanReport, AIScanFinding } from "./ai-scanner.js";
 import type { FindingRow, KBStats } from "./db.js";
@@ -95,7 +100,29 @@ export interface SearchResult {
 }
 
 /** Search the knowledge base. Optionally filter by category. */
-export function searchKB(query: string, options?: { category?: string; limit?: number }): SearchResult {
+export async function searchKB(query: string, options?: { category?: string; limit?: number }): Promise<SearchResult> {
+  if (isRemoteKB()) {
+    const extracted = await remoteSearchFindings(query, {
+      category: options?.category,
+      limit: options?.limit,
+    });
+    // Build FindingRow-compatible objects from ExtractedFinding for callers that read .findings
+    const findings: FindingRow[] = extracted.map((ef, i) => ({
+      id: i,
+      report_id: ef.sourceId || "",
+      extraction_id: 0,
+      severity: ef.severity,
+      title: ef.title,
+      description: ef.description,
+      category: ef.category,
+      cwe: ef.cwe || null,
+      confidence: 1,
+      canonical_id: null,
+      firm: ef.firm,
+      target: ef.target,
+    }));
+    return { findings, extracted, query };
+  }
   const db = getDB();
   const limit = options?.limit || 25;
   const findings = options?.category
@@ -107,7 +134,10 @@ export function searchKB(query: string, options?: { category?: string; limit?: n
 
 // ─── KB stats ───────────────────────────────────────────────
 
-export function getStats(): KBStats {
+export async function getStats(): Promise<KBStats> {
+  if (isRemoteKB()) {
+    return remoteGetStats();
+  }
   const db = getDB();
   return db.getStats();
 }

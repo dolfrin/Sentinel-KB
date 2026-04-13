@@ -180,7 +180,7 @@ server.tool(
   {},
   async () => {
     try {
-      const stats = getStats();
+      const stats = await getStats();
 
       const lines: string[] = [];
       lines.push(`Knowledge Base: ${stats.total_findings} findings from ${stats.total_reports} reports by ${stats.total_firms} firms`);
@@ -230,7 +230,7 @@ server.tool(
   },
   async ({ query, category, limit }) => {
     try {
-      const result = searchKB(query, { category, limit: limit || undefined });
+      const result = await searchKB(query, { category, limit: limit || undefined });
 
       if (result.findings.length === 0) {
         return { content: [{ type: "text", text: `No findings matching "${query}"` }] };

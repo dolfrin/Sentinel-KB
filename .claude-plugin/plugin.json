@@ -1,0 +1,11 @@
+{
+  "name": "sentinel-kb",
+  "description": "AI-powered security vulnerability scanner backed by 2100+ real findings from 58 professional audit firms. Static scan is instant and offline. Knowledge base provides context from Trail of Bits, Cure53, NCC Group, and 55+ more firms.",
+  "version": "0.1.0",
+  "author": {
+    "name": "sentinel-kb"
+  },
+  "license": "AGPL-3.0",
+  "repository": "https://github.com/sentinel-kb/sentinel-kb",
+  "homepage": "https://sentinel-kb.dev"
+}

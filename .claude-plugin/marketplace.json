@@ -1,0 +1,25 @@
+{
+  "name": "sentinel-kb-marketplace",
+  "owner": {
+    "name": "dolfrin",
+    "email": "info@quantumwing.io"
+  },
+  "metadata": {
+    "description": "Security vulnerability scanner backed by 2100+ real audit findings from 58 professional firms"
+  },
+  "plugins": [
+    {
+      "name": "sentinel-kb",
+      "source": ".",
+      "description": "AI-powered security scanner with 40+ static rules and a knowledge base of 2100+ real vulnerabilities from Trail of Bits, Cure53, NCC Group, and 55+ more audit firms.",
+      "version": "0.1.0",
+      "author": {
+        "name": "dolfrin"
+      },
+      "license": "AGPL-3.0",
+      "category": "security",
+      "tags": ["security", "audit", "vulnerability", "scanner", "owasp", "static-analysis"],
+      "keywords": ["security", "vulnerability-scanner", "code-audit", "owasp", "static-analysis"]
+    }
+  ]
+}
