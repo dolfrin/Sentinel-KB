@@ -132,8 +132,15 @@ function crawlViaGitClone(repoUrl: string, label: string, owner: string): Discov
       execSync(`git clone --bare --depth 1 "${repoUrl}" "${tmpDir}"`, { timeout: 180000, stdio: "pipe" });
     }
 
-    // List all files via git ls-tree (no checkout needed)
+    // Detect default branch name (master vs main)
     const gitDir = fs.existsSync(path.join(tmpDir, "HEAD")) ? tmpDir : path.join(tmpDir, ".git");
+    let defaultBranch = "main";
+    try {
+      const headRef = execSync(`git --git-dir="${gitDir}" symbolic-ref HEAD`, { timeout: 5000, stdio: "pipe" }).toString().trim();
+      defaultBranch = headRef.replace("refs/heads/", "");
+    } catch {}
+
+    // List all files via git ls-tree (no checkout needed)
     const output = execSync(`git --git-dir="${gitDir}" ls-tree -r --name-only HEAD`, { timeout: 15000, stdio: "pipe", maxBuffer: 10 * 1024 * 1024 }).toString();
 
     for (const line of output.split("\n")) {
@@ -142,7 +149,9 @@ function crawlViaGitClone(repoUrl: string, label: string, owner: string): Discov
       if (parts.length < 2) continue;
       const firmName = parts[0];
       const pdfName = parts[parts.length - 1];
-      const downloadUrl = `https://raw.githubusercontent.com/${owner}/main/${parts.map(encodeURIComponent).join("/")}`;
+      // Use the full path as-is (URL-encode each segment)
+      const encodedPath = parts.map((p) => encodeURIComponent(p)).join("/");
+      const downloadUrl = `https://raw.githubusercontent.com/${owner}/${defaultBranch}/${encodedPath}`;
       reports.push({
         id: makeId(firmName, pdfName),
         firm: firmName.replace(/([a-z])([A-Z])/g, "$1 $2"),
