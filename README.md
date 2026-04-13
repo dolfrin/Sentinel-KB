@@ -236,7 +236,7 @@ If Sentinel-KB helped you find a real vulnerability or saved you audit hours, co
 
 | Method | Address |
 |--------|---------|
-| EVM (ETH/Base/Arb) | `0x00a5CDa0b5C4a1027CBc5a2A9f0D275995a3813A` |
+| EVM (any chain) | `0x00a5CDa0b5C4a1027CBc5a2A9f0D275995a3813A` |
 | Solana | `8gXiJm91Y3s7Fr9encnoD5aCgnGAX59fsfy8K5VKMPHq` |
 
 ## License
