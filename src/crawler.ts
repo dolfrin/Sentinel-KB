@@ -94,17 +94,33 @@ async function getMasterFirms(): Promise<{ name: string; path: string }[]> {
     .map((item: any) => ({ name: item.name, path: item.path }));
 }
 
-/** Get all PDF files from a firm's directory (non-recursive for API rate limits) */
+/** Sleep helper */
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Get all PDF files from a firm's directory with retry on rate limit */
 async function getFirmPdfs(firmPath: string): Promise<{ name: string; download_url: string }[]> {
-  try {
-    const contents = await fetchJson(`${MASTER_API}/${encodeURIComponent(firmPath)}`);
-    return contents
-      .filter((item: any) => item.type === "file" && item.name.toLowerCase().endsWith(".pdf"))
-      .map((item: any) => ({ name: item.name, download_url: item.download_url }));
-  } catch (error) {
-    console.error(`[sentinel-kb] Failed to crawl firm ${firmPath}: ${error instanceof Error ? error.message : error}`);
-    return [];
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const contents = await fetchJson(`${MASTER_API}/${encodeURIComponent(firmPath)}`);
+      return contents
+        .filter((item: any) => item.type === "file" && item.name.toLowerCase().endsWith(".pdf"))
+        .map((item: any) => ({ name: item.name, download_url: item.download_url }));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes("403") && attempt < MAX_RETRIES) {
+        const delay = (attempt + 1) * 5000; // 5s, 10s, 15s
+        console.error(`[sentinel-kb] Rate limited on ${firmPath}, retrying in ${delay / 1000}s...`);
+        await sleep(delay);
+        continue;
+      }
+      console.error(`[sentinel-kb] Failed to crawl firm ${firmPath}: ${msg}`);
+      return [];
+    }
   }
+  return [];
 }
 
 /**
@@ -119,9 +135,9 @@ export async function crawlMasterRepo(progress?: (msg: string) => void): Promise
     const firms = await getMasterFirms();
     log(`  Found ${firms.length} firms in master repo`);
 
-    // Process in batches of 5 to avoid GitHub rate limits
-    for (let i = 0; i < firms.length; i += 5) {
-      const batch = firms.slice(i, i + 5);
+    // Process in batches of 3 with pauses to avoid GitHub rate limits
+    for (let i = 0; i < firms.length; i += 3) {
+      const batch = firms.slice(i, i + 3);
       const results = await Promise.all(
         batch.map(async (firm) => {
           const pdfs = await getFirmPdfs(firm.path);
@@ -139,9 +155,9 @@ export async function crawlMasterRepo(progress?: (msg: string) => void): Promise
         reports.push(...firmReports);
       }
 
-      // Brief pause between batches to respect rate limits
-      if (i + 5 < firms.length) {
-        await new Promise((r) => setTimeout(r, 500));
+      // Pause between batches to respect GitHub rate limits
+      if (i + 3 < firms.length) {
+        await sleep(2000);
       }
     }
   } catch (err: any) {
@@ -157,23 +173,33 @@ export async function crawlMasterRepo(progress?: (msg: string) => void): Promise
 
 export async function crawlTrailOfBits(): Promise<DiscoveredReport[]> {
   const reports: DiscoveredReport[] = [];
-  try {
-    const contents = await fetchJson(
-      "https://api.github.com/repos/trailofbits/publications/contents/reviews"
-    );
-    for (const item of contents) {
-      if (!item.name.endsWith(".pdf")) continue;
-      reports.push({
-        id: makeId("tob", item.name),
-        firm: "Trail of Bits",
-        target: filenameToTarget(item.name),
-        url: item.download_url,
-        filename: item.name,
-        year: extractYear(item.name),
-      });
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const contents = await fetchJson(
+        "https://api.github.com/repos/trailofbits/publications/contents/reviews"
+      );
+      for (const item of contents) {
+        if (!item.name.endsWith(".pdf")) continue;
+        reports.push({
+          id: makeId("tob", item.name),
+          firm: "Trail of Bits",
+          target: filenameToTarget(item.name),
+          url: item.download_url,
+          filename: item.name,
+          year: extractYear(item.name),
+        });
+      }
+      break;
+    } catch (err: any) {
+      if (err.message.includes("403") && attempt < MAX_RETRIES) {
+        const delay = (attempt + 1) * 5000;
+        console.error(`  Trail of Bits rate limited, retrying in ${delay / 1000}s...`);
+        await sleep(delay);
+        continue;
+      }
+      console.error(`  Failed to crawl Trail of Bits: ${err.message}`);
     }
-  } catch (err: any) {
-    console.error(`  Failed to crawl Trail of Bits: ${err.message}`);
   }
   return reports;
 }

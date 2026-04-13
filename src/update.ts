@@ -278,12 +278,25 @@ async function main() {
     }
   }
 
-  console.log(`  Processing ${validReports.length} valid PDFs...\n`);
+  // Filter out reports already extracted with this method
+  const methodSlug = useAI
+    ? (process.argv.includes("--ai-model")
+        ? process.argv[process.argv.indexOf("--ai-model") + 1]
+        : "sonnet")
+    : "regex";
+  const newReports = validReports.filter((r) => !db.isExtracted(r.source.id, methodSlug));
+  const skippedExtraction = validReports.length - newReports.length;
+
+  console.log(`  Total valid PDFs: ${validReports.length} (${skippedExtraction} already extracted, ${newReports.length} new)\n`);
 
   let allFindings: ExtractedFinding[];
   let parseErrors: number;
 
-  if (useAI) {
+  if (newReports.length === 0) {
+    console.log("  Nothing new to extract — skipping.\n");
+    allFindings = [];
+    parseErrors = 0;
+  } else if (useAI) {
     const apiKey = process.env.ANTHROPIC_API_KEY!;
     const aiModel = process.argv.includes("--ai-model")
       ? process.argv[process.argv.indexOf("--ai-model") + 1]
@@ -292,7 +305,7 @@ async function main() {
       ? parseInt(process.argv[process.argv.indexOf("--concurrency") + 1])
       : 3;
 
-    const result = await aiExtractAll(validReports, apiKey, db, aiModel, concurrency);
+    const result = await aiExtractAll(newReports, apiKey, db, aiModel, concurrency);
     allFindings = result.findings;
     parseErrors = result.errors.length;
 
@@ -313,7 +326,7 @@ async function main() {
     parseErrors = 0;
     let parsed = 0;
 
-    for (const report of validReports) {
+    for (const report of newReports) {
       try {
         const findings = await extractFromPdf(report.path, report.source);
         allFindings.push(...findings);
