@@ -129,7 +129,7 @@ function crawlViaGitClone(repoUrl: string, label: string, owner: string): Discov
     } else {
       // Bare clone — no file checkout, just tree objects
       fs.rmSync(tmpDir, { recursive: true, force: true });
-      execSync(`git clone --bare --depth 1 "${repoUrl}" "${tmpDir}"`, { timeout: 60000, stdio: "pipe" });
+      execSync(`git clone --bare --depth 1 "${repoUrl}" "${tmpDir}"`, { timeout: 180000, stdio: "pipe" });
     }
 
     // List all files via git ls-tree (no checkout needed)

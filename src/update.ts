@@ -175,7 +175,9 @@ async function main() {
   let skipped = 0;
   let dlFailed = 0;
 
-  const BATCH_SIZE = 10;
+  // Download in small batches with retry to avoid rate limits
+  const BATCH_SIZE = 5;
+  const MAX_DL_RETRIES = 2;
   for (let i = 0; i < reports.length; i += BATCH_SIZE) {
     const batch = reports.slice(i, i + BATCH_SIZE);
     await Promise.allSettled(
@@ -187,16 +189,28 @@ async function main() {
           return;
         }
         fs.rmSync(dest, { force: true });
-        try {
-          await downloadPdf(report.url, dest);
-          downloaded++;
-          db.updateDownloadStatus(report.id, "downloaded", { pdfPath: dest });
-        } catch (err: any) {
-          dlFailed++;
-          db.updateDownloadStatus(report.id, "failed", { error: err.message });
+        for (let attempt = 0; attempt <= MAX_DL_RETRIES; attempt++) {
+          try {
+            await downloadPdf(report.url, dest);
+            downloaded++;
+            db.updateDownloadStatus(report.id, "downloaded", { pdfPath: dest });
+            return;
+          } catch (err: any) {
+            if (attempt < MAX_DL_RETRIES && (err.message.includes("403") || err.message.includes("429") || err.message.includes("ETIMEDOUT"))) {
+              await new Promise((r) => setTimeout(r, (attempt + 1) * 3000));
+              continue;
+            }
+            dlFailed++;
+            db.updateDownloadStatus(report.id, "failed", { error: err.message });
+          }
         }
       })
     );
+
+    // Brief pause between batches
+    if (i + BATCH_SIZE < reports.length) {
+      await new Promise((r) => setTimeout(r, 500));
+    }
 
     const total = Math.min(i + BATCH_SIZE, reports.length);
     process.stdout.write(`\r  Progress: ${total}/${reports.length} (${downloaded} new, ${skipped} cached, ${dlFailed} failed)`);
