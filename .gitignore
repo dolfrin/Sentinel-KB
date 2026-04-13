@@ -1,2 +1,24 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+
+# Claude Code local config
+.claude/
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Audit report PDFs (large binaries, not for public repo)
+*.pdf
+
+# SQLite databases
+*.db
+*.db-wal
+*.db-shm
+
+# Signal audit materials (should not be in public repo)
+signal-android-audit.html
+signal-disclosure.md
