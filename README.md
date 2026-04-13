@@ -243,7 +243,8 @@ If Sentinel-KB helped you find a real vulnerability or saved you audit hours, co
 |--------|------|
 | GitHub Sponsors | [github.com/sponsors/dolfrin](https://github.com/sponsors/dolfrin) |
 | Buy Me a Coffee | [buymeacoffee.com/dolfrin](https://buymeacoffee.com/dolfrin) |
-| Bitcoin | `bc1qYOUR_BTC_ADDRESS_HERE` |
+| EVM (ETH/Base/Arb) | `0x00a5CDa0b5C4a1027CBc5a2A9f0D275995a3813A` |
+| Solana | `8gXiJm91Y3s7Fr9encnoD5aCgnGAX59fsfy8K5VKMPHq` |
 
 ## License
 
