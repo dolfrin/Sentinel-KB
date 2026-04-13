@@ -124,7 +124,7 @@ describe("audit() — detects SQL injection (SRV-003)", () => {
     const report = audit(tmpDir);
     const finding = report.findings.find((f) => f.ruleId === "SRV-003");
     expect(finding).toBeDefined();
-    expect(finding!.severity).toBe("critical");
+    expect(finding!.severity).toBe("high");
     expect(finding!.file).toContain("query.rs");
   });
 
@@ -265,11 +265,14 @@ describe("audit() — skips build artifacts directories", () => {
   });
 });
 
-// ─── options.severity filtering ──────────────────────────────────────────────
+// ─── options.severity filtering (threshold semantics) ────────────────────────
+//
+// severity acts as a minimum threshold: each provided level includes itself and
+// all higher severities.  e.g. ["high"] → critical + high.
 
-describe("audit() — options.severity filter", () => {
+describe("audit() — options.severity filter (threshold)", () => {
   beforeEach(() => {
-    // This file triggers AND-002 (high), AND-003 (high), AND-005 (medium)
+    // AND-002 (high), AND-003 (high), AND-005 (medium)
     writeFile(tmpDir, "AndroidManifest.xml", `
       <application android:usesCleartextTraffic="true" android:allowBackup="true">
       </application>
@@ -286,26 +289,44 @@ describe("audit() — options.severity filter", () => {
     }
   });
 
-  it("returns only high findings when severity=['high']", () => {
+  it("returns critical and high findings when severity=['high']", () => {
     const report = audit(tmpDir, { severity: ["high"] });
     for (const f of report.findings) {
-      expect(f.severity).toBe("high");
+      expect(["critical", "high"]).toContain(f.severity);
     }
+    // Should not contain medium, low, or info
+    const severities = new Set(report.findings.map((f) => f.severity));
+    expect(severities.has("medium")).toBe(false);
+    expect(severities.has("low")).toBe(false);
+    expect(severities.has("info")).toBe(false);
   });
 
-  it("returns both high and medium when severity=['high','medium']", () => {
-    const report = audit(tmpDir, { severity: ["high", "medium"] });
+  it("returns critical, high, and medium when severity=['medium']", () => {
+    const report = audit(tmpDir, { severity: ["medium"] });
+    for (const f of report.findings) {
+      expect(["critical", "high", "medium"]).toContain(f.severity);
+    }
     const severities = new Set(report.findings.map((f) => f.severity));
-    // Should contain no critical or low/info
-    expect(severities.has("critical")).toBe(false);
     expect(severities.has("low")).toBe(false);
+    expect(severities.has("info")).toBe(false);
+  });
+
+  it("returns critical+high+medium when severity=['high','medium'] (loosest threshold wins)", () => {
+    const report = audit(tmpDir, { severity: ["high", "medium"] });
+    for (const f of report.findings) {
+      expect(["critical", "high", "medium"]).toContain(f.severity);
+    }
+    const severities = new Set(report.findings.map((f) => f.severity));
+    expect(severities.has("low")).toBe(false);
+    expect(severities.has("info")).toBe(false);
   });
 
   it("summary counts match actual findings when filtered", () => {
     const report = audit(tmpDir, { severity: ["high"] });
     let counted = 0;
     for (const [sev, count] of Object.entries(report.summary)) {
-      if (sev !== "high") {
+      // Only critical and high should have counts
+      if (sev !== "critical" && sev !== "high") {
         expect(count).toBe(0);
       }
       counted += count;

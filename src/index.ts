@@ -28,13 +28,18 @@ server.tool(
     severity: z
       .array(z.enum(["critical", "high", "medium", "low", "info"]))
       .optional()
-      .describe("Filter by minimum severity levels to include"),
+      .describe("Minimum severity threshold — includes this level and all higher severities. E.g. ['high'] returns critical+high, ['medium'] returns critical+high+medium. Multiple values use the loosest threshold."),
+    includeAllDirs: z
+      .boolean()
+      .optional()
+      .describe("If true, scan directories normally skipped by default (docs, tests, examples, etc.)"),
   },
-  async ({ projectPath, categories, severity }) => {
+  async ({ projectPath, categories, severity, includeAllDirs }) => {
     try {
       const report = audit(projectPath, {
         categories: categories as string[] | undefined,
         severity: severity as Severity[] | undefined,
+        includeAllDirs,
       });
       const text = formatReport(report);
       return {

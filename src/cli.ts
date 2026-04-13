@@ -5,6 +5,9 @@
 import { audit, formatReport } from "./scanner.js";
 import { aiScan, formatAIReport } from "./ai-scanner.js";
 import { getDB, closeDB } from "./db.js";
+import type { Severity } from "./rules.js";
+
+const SEVERITY_LEVELS: Severity[] = ["critical", "high", "medium", "low", "info"];
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -14,18 +17,19 @@ function usage() {
   sentinel-kb \u2014 AI-powered security vulnerability scanner
 
   Usage:
-    sentinel-kb scan <path> [--severity critical|high|medium|low] [--category <cat>] [--json]
+    sentinel-kb scan <path> [--severity critical|high|medium|low|info] [--category <cat>] [--include-all-dirs] [--json]
     sentinel-kb ai <path> [--model sonnet|opus|haiku] [--max-batches <n>] [--json]
     sentinel-kb stats
-    sentinel-kb search <query>
+    sentinel-kb search <query> [--limit N] [--json]
     sentinel-kb migrate
     sentinel-kb update [--regex] [--ai-model <model>] [--concurrency <n>]
 
   Commands:
     scan      Static security scan (free, fast, offline)
+              --severity uses threshold: "high" includes high + critical
     ai        AI-powered deep scan with KB context
     stats     Knowledge base statistics
-    search    Full-text search the vulnerability KB
+    search    Full-text search the vulnerability KB (default limit: 25)
     migrate   Import legacy JSON data to SQLite
     update    Update knowledge base from audit sources
 `);
@@ -87,15 +91,25 @@ async function main() {
   }
 
   if (command === "search") {
-    const query = args.slice(1).filter((a) => !a.startsWith("--")).join(" ");
+    const db = getDB();
+    const searchArgs = args.slice(1);
+    const limitIdx = searchArgs.indexOf("--limit");
+    let limit = 25;
+    const skipIndices = new Set<number>();
+    if (limitIdx >= 0) {
+      limit = parseInt(searchArgs[limitIdx + 1]) || 25;
+      skipIndices.add(limitIdx);
+      skipIndices.add(limitIdx + 1);
+    }
+    const jsonIdx = searchArgs.indexOf("--json");
+    if (jsonIdx >= 0) {
+      skipIndices.add(jsonIdx);
+    }
+    const query = searchArgs.filter((_, i) => !skipIndices.has(i)).join(" ");
     if (!query) {
-      console.error("Usage: sentinel-kb search <query>");
+      console.error("Usage: sentinel-kb search <query> [--limit N] [--json]");
       process.exit(1);
     }
-
-    const db = getDB();
-    const limitIdx = args.indexOf("--limit");
-    const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1]) : 25;
 
     const results = db.searchFindings(query, limit);
 
@@ -138,8 +152,41 @@ async function main() {
   const maxBatches = maxBatchFlag >= 0 ? parseInt(args[maxBatchFlag + 1]) : 20;
 
   if (command === "scan") {
-    console.log(`\nStatic scan: ${projectPath}\n`);
-    const report = audit(projectPath);
+    // Parse --severity flag (threshold: includes specified level and above)
+    const sevIdx = args.indexOf("--severity");
+    let severityFilter: Severity[] | undefined;
+    if (sevIdx >= 0) {
+      const sevArg = (args[sevIdx + 1] || "").toLowerCase() as Severity;
+      const sevThreshold = SEVERITY_LEVELS.indexOf(sevArg);
+      if (sevThreshold < 0) {
+        console.error(`Invalid severity: "${args[sevIdx + 1]}". Valid: ${SEVERITY_LEVELS.join(", ")}`);
+        process.exit(1);
+      }
+      // Include the specified severity and all levels above it (lower index = higher severity)
+      severityFilter = SEVERITY_LEVELS.slice(0, sevThreshold + 1);
+    }
+
+    // Parse --category flag
+    const catIdx = args.indexOf("--category");
+    let categoryFilter: string[] | undefined;
+    if (catIdx >= 0) {
+      const catArg = args[catIdx + 1];
+      if (!catArg || catArg.startsWith("--")) {
+        console.error("--category requires a value (e.g., --category Cryptography)");
+        process.exit(1);
+      }
+      categoryFilter = [catArg];
+    }
+
+    // Parse --include-all-dirs flag
+    const includeAllDirs = args.includes("--include-all-dirs");
+
+    console.log(`\nStatic scan: ${projectPath}${includeAllDirs ? " (including all dirs)" : ""}\n`);
+    const report = audit(projectPath, {
+      ...(severityFilter && { severity: severityFilter }),
+      ...(categoryFilter && { categories: categoryFilter }),
+      ...(includeAllDirs && { includeAllDirs: true }),
+    });
 
     if (useJson) {
       console.log(JSON.stringify(report, null, 2));
@@ -165,7 +212,7 @@ async function main() {
     }
 
     closeDB();
-    process.exit(report.summary.critical > 0 ? 2 : report.summary.high > 0 ? 1 : 0);
+    process.exit(report.errors.length > 0 ? 3 : report.summary.critical > 0 ? 2 : report.summary.high > 0 ? 1 : 0);
   }
 
   console.error(`Unknown command: ${command}`);

@@ -26,6 +26,7 @@ export interface AIScanReport {
   projectPath: string;
   filesScanned: number;
   findings: AIScanFinding[];
+  errors: string[];
   summary: { critical: number; high: number; medium: number; low: number; info: number };
   knowledgeBaseSize: number;
   model: string;
@@ -176,30 +177,25 @@ ${fileContents.join("\n")}
 
 Analyze the code above. Find real security vulnerabilities based on patterns from the knowledge base. Return JSON array only.`;
 
-  try {
-    const response = await client.messages.create({
-      model,
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-    });
+  const response = await client.messages.create({
+    model,
+    max_tokens: 8192,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userMessage }],
+  });
 
-    const text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+  const text = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
 
-    // Extract JSON from response (may be wrapped in ```json blocks)
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
+  // Extract JSON from response (may be wrapped in ```json blocks)
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return [];
 
-    const parsed = JSON.parse(jsonMatch[0]) as AIScanFinding[];
-    // Filter to only high/medium confidence
-    return parsed.filter((f) => f.confidence === "high" || f.confidence === "medium");
-  } catch (err: any) {
-    console.error(`  AI analysis error: ${err.message}`);
-    return [];
-  }
+  const parsed = JSON.parse(jsonMatch[0]) as AIScanFinding[];
+  // Filter to only high/medium confidence
+  return parsed.filter((f) => f.confidence === "high" || f.confidence === "medium");
 }
 
 /** Run full AI-powered security scan */
@@ -260,19 +256,26 @@ export async function aiScan(
 
   // Analyze each batch
   const allFindings: AIScanFinding[] = [];
+  const allErrors: string[] = [];
   for (let i = 0; i < batchesToProcess.length; i++) {
     const batch = batchesToProcess[i];
     const relPaths = batch.map((f) => path.relative(projectDir, f));
     console.log(`  [${i + 1}/${batchesToProcess.length}] ${relPaths.join(", ").substring(0, 80)}...`);
 
-    const findings = await analyzeBatch(client, batch, projectDir, kbContext, model);
-    allFindings.push(...findings);
+    try {
+      const findings = await analyzeBatch(client, batch, projectDir, kbContext, model);
+      allFindings.push(...findings);
 
-    if (findings.length > 0) {
-      for (const f of findings) {
-        const icon = f.severity === "critical" ? "!!" : f.severity === "high" ? "!" : "-";
-        console.log(`    ${icon} [${f.severity.toUpperCase()}] ${f.title} (${f.file}:${f.line || "?"})`);
+      if (findings.length > 0) {
+        for (const f of findings) {
+          const icon = f.severity === "critical" ? "!!" : f.severity === "high" ? "!" : "-";
+          console.log(`    ${icon} [${f.severity.toUpperCase()}] ${f.title} (${f.file}:${f.line || "?"})`);
+        }
       }
+    } catch (err: any) {
+      const errorMsg = `Batch ${i + 1}: ${err.message || String(err)}`;
+      allErrors.push(errorMsg);
+      console.error(`  !! Batch ${i + 1} failed: ${err.message || String(err)}`);
     }
   }
 
@@ -294,6 +297,7 @@ export async function aiScan(
     projectPath: projectDir,
     filesScanned: files.length,
     findings: visibleFindings,
+    errors: allErrors,
     summary,
     knowledgeBaseSize: stats.total_findings,
     model,
@@ -319,6 +323,15 @@ export function formatAIReport(report: AIScanReport): string {
   lines.push("───────────────────────────────────────────────────────────────");
   lines.push(`  CRITICAL: ${report.summary.critical}  HIGH: ${report.summary.high}  MEDIUM: ${report.summary.medium}  LOW: ${report.summary.low}  INFO: ${report.summary.info}`);
   lines.push("───────────────────────────────────────────────────────────────");
+
+  if (report.errors.length > 0) {
+    lines.push("");
+    lines.push(`  \u26A0 ${report.errors.length} batch${report.errors.length === 1 ? "" : "es"} failed during scan \u2014 results may be incomplete`);
+    for (const err of report.errors) {
+      lines.push(`    - ${err}`);
+    }
+    lines.push("");
+  }
 
   if (report.findings.length === 0 && (!gate || gate.gated.length === 0)) {
     lines.push("\n  No significant security issues found.\n");

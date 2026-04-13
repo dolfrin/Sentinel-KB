@@ -1,6 +1,27 @@
 import * as fs from "fs";
 import * as path from "path";
+import picomatch from "picomatch";
 import { Rule, Severity, allRules } from "./rules.js";
+
+/** Numeric severity ranking — lower value = more severe */
+const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+const ALL_SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
+
+/**
+ * Expand severity thresholds into the full set of severities at or above each
+ * threshold.  Each entry is treated as a minimum — all severities at that level
+ * or higher are included.  Multiple entries use the loosest (most inclusive).
+ *
+ * Examples:
+ *   ["high"]           → {critical, high}
+ *   ["medium"]         → {critical, high, medium}
+ *   ["critical"]       → {critical}
+ *   ["critical","low"] → {critical, high, medium, low}
+ */
+function expandSeverityThresholds(thresholds: Severity[]): Set<Severity> {
+  const maxRank = Math.max(...thresholds.map((s) => SEVERITY_RANK[s]));
+  return new Set(ALL_SEVERITIES.filter((s) => SEVERITY_RANK[s] <= maxRank));
+}
 
 export interface Finding {
   ruleId: string;
@@ -11,6 +32,8 @@ export interface Finding {
   file: string;
   line: number;
   snippet: string;
+  totalOccurrences?: number;       // total times this rule fired across project
+  additionalLocations?: string[];  // file:line for locations beyond the shown MAX_PER_RULE
 }
 
 export interface AuditReport {
@@ -22,23 +45,39 @@ export interface AuditReport {
   categories: Record<string, number>;
 }
 
+// Directories that are ALWAYS skipped — build artifacts, dependencies, VCS
+const coreSkipDirs = new Set([
+  // Build & dependency dirs
+  "node_modules", ".git", "build", "target", ".gradle", ".idea", ".cxx", "dist", "out",
+  // Third-party / vendor / generated / submodules
+  "vendor", "third_party", "thirdparty", "third-party", "external", "generated", "proto",
+  "submodules", "Submodules",
+]);
+
+// Directories skipped by default but overridable via includeAllDirs
+const defaultSkipDirs = new Set([
+  // Test directories
+  "__tests__", "test", "tests", "Tests", "androidTest", "benchmarkShared", "testFixtures",
+  "androidBenchmark", "androidInstrumentedTest", "commonTest", "jvmTest",
+  // Demo / sample / e2e
+  "demo", "sample", "samples", "example", "examples", "fixtures", "e2e", "cypress", "playwright",
+  // Assets (bundled JS like ace.min.js)
+  "assets",
+  // Documentation source
+  "docs_src", "docs",
+  // Ruby/RSpec test dirs
+  "spec",
+  // Development environment / tooling
+  "devenv", "testdata", "testing", "test-plugins",
+]);
+
 /** Recursively collect files matching glob-like patterns */
-function collectFiles(dir: string, patterns: string[]): string[] {
+function collectFiles(dir: string, patterns: string[], includeAllDirs?: boolean): string[] {
   const results: string[] = [];
   const seen = new Set<string>();
 
   function matchesPattern(filePath: string, pattern: string): boolean {
-    const fileName = path.basename(filePath);
-    // Simple glob: **/*.ext or **/Name*.ext
-    if (pattern.startsWith("**/")) {
-      const rest = pattern.slice(3);
-      if (rest.includes("*")) {
-        const regex = new RegExp("^" + rest.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$");
-        return regex.test(fileName);
-      }
-      return fileName === rest || filePath.endsWith(rest);
-    }
-    return fileName === pattern;
+    return picomatch(pattern)(filePath);
   }
 
   function walk(currentDir: string) {
@@ -54,23 +93,10 @@ function collectFiles(dir: string, patterns: string[]): string[] {
 
       // Skip common non-source directories
       if (entry.isDirectory()) {
-        const skipDirs = new Set([
-          // Build & dependency dirs
-          "node_modules", ".git", "build", "target", ".gradle", ".idea", ".cxx", "dist", "out",
-          // Test directories
-          "__tests__", "test", "tests", "Tests", "androidTest", "benchmarkShared", "testFixtures",
-          "androidBenchmark", "androidInstrumentedTest", "commonTest", "jvmTest",
-          // Third-party / vendor / generated / submodules
-          "vendor", "third_party", "thirdparty", "third-party", "external", "generated", "proto",
-          "submodules", "Submodules",
-          // Demo / sample / e2e
-          "demo", "sample", "samples", "example", "examples", "fixtures", "e2e", "cypress", "playwright",
-          // Assets (bundled JS like ace.min.js)
-          "assets",
-          // Development environment / tooling
-          "devenv", "testdata", "testing", "test-plugins",
-        ]);
-        if (skipDirs.has(entry.name) || entry.name.startsWith("e2e-") || entry.name.startsWith("__")) {
+        if (coreSkipDirs.has(entry.name)
+          || (!includeAllDirs && defaultSkipDirs.has(entry.name))
+          || entry.name.startsWith("e2e-")
+          || entry.name.startsWith("__")) {
           continue;
         }
         walk(fullPath);
@@ -173,16 +199,20 @@ function scanFile(filePath: string, content: string, rules: Rule[], projectDir: 
 }
 
 /** Run full audit on a project directory */
-export function audit(projectDir: string, options?: { categories?: string[]; severity?: Severity[] }): AuditReport {
+export function audit(projectDir: string, options?: { categories?: string[]; severity?: Severity[]; includeAllDirs?: boolean }): AuditReport {
+  // Expand severity filter: each provided level acts as a minimum threshold,
+  // so ["high"] includes critical + high, ["medium"] includes critical + high + medium, etc.
+  const expandedSeverities = options?.severity ? expandSeverityThresholds(options.severity) : null;
+
   const rules = allRules.filter((r) => {
     if (options?.categories && !options.categories.includes(r.category)) return false;
-    if (options?.severity && !options.severity.includes(r.severity)) return false;
+    if (expandedSeverities && !expandedSeverities.has(r.severity)) return false;
     return true;
   });
 
   // Collect all unique file patterns
   const allPatterns = [...new Set(rules.flatMap((r) => r.filePatterns))];
-  const files = collectFiles(projectDir, allPatterns);
+  const files = collectFiles(projectDir, allPatterns, options?.includeAllDirs);
 
   const allFindings: Finding[] = [];
 
@@ -200,7 +230,7 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
     }
 
     // Skip test files — they contain intentional test data, fake credentials, etc.
-    if (/_test\.go$|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|_test\.py$|_test\.rs$|Test\.java$|Test\.kt$/.test(fileName)) {
+    if (/_test\.go$|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|\.e2e-spec\.[jt]sx?$|\.e2e\.[jt]sx?$|_test\.py$|_test\.rs$|Test\.java$|Test\.kt$/.test(fileName)) {
       continue;
     }
 
@@ -240,19 +270,9 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
     }
 
     // Find applicable rules for this file
+    const relFile = path.relative(projectDir, file);
     const applicableRules = rules.filter((r) =>
-      r.filePatterns.some((p) => {
-        const fn = path.basename(file);
-        if (p.startsWith("**/")) {
-          const rest = p.slice(3);
-          if (rest.includes("*")) {
-            const regex = new RegExp("^" + rest.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$");
-            return regex.test(fn);
-          }
-          return fn === rest || file.endsWith(rest);
-        }
-        return fn === p;
-      })
+      r.filePatterns.some((p) => picomatch(p)(relFile))
     );
 
     if (applicableRules.length > 0) {
@@ -267,14 +287,14 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
     if (rule.requiredPatterns) {
       // Check if the project has any files that match the rule's filePatterns
       // If no domain files exist, the rule is irrelevant to this project
-      const domainFiles = collectFiles(projectDir, rule.filePatterns);
+      const domainFiles = collectFiles(projectDir, rule.filePatterns, options?.includeAllDirs);
       if (domainFiles.length === 0) {
         // No domain-relevant files — skip absence checks for this rule entirely
         continue;
       }
 
       for (const rp of rule.requiredPatterns) {
-        const patternFiles = collectFiles(projectDir, [rp.filePattern]);
+        const patternFiles = collectFiles(projectDir, [rp.filePattern], options?.includeAllDirs);
         let found = false;
         for (const file of patternFiles) {
           try {
@@ -318,14 +338,52 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
     }
   }
 
+  // Deduplicate: cap at 3 findings per rule across the entire project.
+  // An audit reports distinct issues, not every occurrence of the same pattern.
+  // If a rule fires 89 times, that's ONE issue with note "found in N locations".
+  const MAX_PER_RULE = 3;
+  const ruleHitCounts: Record<string, number> = {};
+  const ruleTotalCounts: Record<string, number> = {};
+  const ruleExtraLocations: Record<string, string[]> = {};
+
+  // First pass: count totals per rule and collect all locations beyond MAX_PER_RULE
+  for (const f of allFindings) {
+    ruleTotalCounts[f.ruleId] = (ruleTotalCounts[f.ruleId] || 0) + 1;
+  }
+
+  // Second pass: keep only first MAX_PER_RULE per rule, collect overflow locations
+  const dedupedFindings: Finding[] = [];
+  for (const f of allFindings) {
+    ruleHitCounts[f.ruleId] = (ruleHitCounts[f.ruleId] || 0) + 1;
+    if (ruleHitCounts[f.ruleId] <= MAX_PER_RULE) {
+      dedupedFindings.push(f);
+    } else {
+      // Track overflow locations as structured metadata
+      if (!ruleExtraLocations[f.ruleId]) ruleExtraLocations[f.ruleId] = [];
+      ruleExtraLocations[f.ruleId].push(`${f.file}:${f.line}`);
+    }
+  }
+
+  // Third pass: annotate kept findings with totalOccurrences and additionalLocations
+  for (const f of dedupedFindings) {
+    const total = ruleTotalCounts[f.ruleId]!;
+    if (total > 1) {
+      f.totalOccurrences = total;
+    }
+    const extras = ruleExtraLocations[f.ruleId];
+    if (extras && extras.length > 0) {
+      f.additionalLocations = extras;
+    }
+  }
+
   // Sort by severity
   const severityOrder: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
-  allFindings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+  dedupedFindings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
   // Build summary
   const summary: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   const categories: Record<string, number> = {};
-  for (const f of allFindings) {
+  for (const f of dedupedFindings) {
     summary[f.severity]++;
     categories[f.category] = (categories[f.category] || 0) + 1;
   }
@@ -334,7 +392,7 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
     timestamp: new Date().toISOString(),
     projectPath: projectDir,
     totalFiles: files.length,
-    findings: allFindings,
+    findings: dedupedFindings,
     summary,
     categories,
   };
@@ -377,6 +435,10 @@ export function formatReport(report: AuditReport): string {
         lines.push(`     ${f.message}`);
         if (f.snippet) {
           lines.push(`     > ${f.snippet}`);
+        }
+        if (f.totalOccurrences && f.totalOccurrences > 1 && f.additionalLocations && f.additionalLocations.length > 0) {
+          const extraList = f.additionalLocations.join(", ");
+          lines.push(`     Found in ${f.totalOccurrences} locations (${f.additionalLocations.length} more: ${extraList})`);
         }
         lines.push("");
       }
