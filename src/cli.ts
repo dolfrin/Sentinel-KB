@@ -2,9 +2,14 @@
 
 // CLI: sentinel-kb scan|ai|stats|search|migrate|update
 
-import { audit, formatReport } from "./scanner.js";
-import { aiScan, formatAIReport } from "./ai-scanner.js";
-import { getDB, closeDB } from "./db.js";
+import {
+  resolveModelName,
+  runStaticScan,
+  runAIScan,
+  searchKB,
+  getStats,
+  closeDB,
+} from "./service.js";
 import type { Severity } from "./rules.js";
 
 const SEVERITY_LEVELS: Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -49,8 +54,7 @@ async function main() {
   }
 
   if (command === "stats") {
-    const db = getDB();
-    const stats = db.getStats();
+    const stats = getStats();
 
     console.log(`\n\u2550\u2550\u2550 Knowledge Base Statistics \u2550\u2550\u2550\n`);
     console.log(`  Findings:   ${stats.total_findings}`);
@@ -91,7 +95,6 @@ async function main() {
   }
 
   if (command === "search") {
-    const db = getDB();
     const searchArgs = args.slice(1);
     const limitIdx = searchArgs.indexOf("--limit");
     let limit = 25;
@@ -111,13 +114,13 @@ async function main() {
       process.exit(1);
     }
 
-    const results = db.searchFindings(query, limit);
+    const result = searchKB(query, { limit });
 
     if (args.includes("--json")) {
-      console.log(JSON.stringify(db.toExtractedFindings(results), null, 2));
+      console.log(JSON.stringify(result.extracted, null, 2));
     } else {
-      console.log(`\n  Search: "${query}" \u2014 ${results.length} results\n`);
-      for (const r of results) {
+      console.log(`\n  Search: "${query}" \u2014 ${result.findings.length} results\n`);
+      for (const r of result.findings) {
         const sev = r.severity.toUpperCase().padEnd(8);
         console.log(`  [${sev}] ${r.title}`);
         console.log(`           ${r.firm} \u2192 ${r.target} | ${r.category}${r.cwe ? ` | ${r.cwe}` : ""}`);
@@ -140,13 +143,8 @@ async function main() {
   const projectPath = args[1] || process.cwd();
   const useJson = args.includes("--json");
   const modelFlag = args.indexOf("--model");
-  const modelMap: Record<string, string> = {
-    sonnet: "claude-sonnet-4-20250514",
-    opus: "claude-opus-4-20250514",
-    haiku: "claude-haiku-4-5-20251001",
-  };
   const modelName = modelFlag >= 0 ? (args[modelFlag + 1] || "sonnet") : "sonnet";
-  const model = modelMap[modelName] || modelName;
+  const model = resolveModelName(modelName);
 
   const maxBatchFlag = args.indexOf("--max-batches");
   const maxBatches = maxBatchFlag >= 0 ? parseInt(args[maxBatchFlag + 1]) : 20;
@@ -182,16 +180,16 @@ async function main() {
     const includeAllDirs = args.includes("--include-all-dirs");
 
     console.log(`\nStatic scan: ${projectPath}${includeAllDirs ? " (including all dirs)" : ""}\n`);
-    const report = audit(projectPath, {
-      ...(severityFilter && { severity: severityFilter }),
-      ...(categoryFilter && { categories: categoryFilter }),
-      ...(includeAllDirs && { includeAllDirs: true }),
+    const { report, text } = runStaticScan(projectPath, {
+      severity: severityFilter,
+      categories: categoryFilter,
+      includeAllDirs,
     });
 
     if (useJson) {
       console.log(JSON.stringify(report, null, 2));
     } else {
-      console.log(formatReport(report));
+      console.log(text);
     }
 
     process.exit(report.summary.critical > 0 ? 2 : report.summary.high > 0 ? 1 : 0);
@@ -203,12 +201,12 @@ async function main() {
     console.log(`  Model: ${model}`);
     console.log(`\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n`);
 
-    const report = await aiScan(projectPath, { model, maxBatches });
+    const { report, text } = await runAIScan(projectPath, { model: modelName, maxBatches });
 
     if (useJson) {
       console.log(JSON.stringify(report, null, 2));
     } else {
-      console.log(formatAIReport(report));
+      console.log(text);
     }
 
     closeDB();

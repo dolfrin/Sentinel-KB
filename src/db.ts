@@ -628,7 +628,8 @@ export class SecurityAuditDB {
     return this.stmts.getFindingsByCategory.all(category, limit) as FindingRow[];
   }
 
-  /** Get findings filtered by multiple categories — for AI scanner */
+  /** Get findings filtered by multiple categories — for AI scanner.
+   *  Returns up to maxPerCategory results PER category (not a single global limit). */
   getRelevantFindingsByCategories(categories: string[], maxPerCategory: number = 20): FindingRow[] {
     if (categories.length === 0) {
       return this.stmts.getRelevantFindings.all(maxPerCategory * 5) as FindingRow[];
@@ -636,15 +637,24 @@ export class SecurityAuditDB {
 
     const placeholders = categories.map(() => "?").join(",");
     const stmt = this.db.prepare(`
-      SELECT f.*, r.firm, r.target FROM findings f
-      JOIN reports r ON f.report_id = r.id
-      WHERE f.category IN (${placeholders})
-      ORDER BY CASE f.severity
+      SELECT * FROM (
+        SELECT f.*, r.firm, r.target,
+          ROW_NUMBER() OVER (
+            PARTITION BY f.category
+            ORDER BY CASE f.severity
+              WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
+              f.confidence DESC
+          ) AS rn
+        FROM findings f
+        JOIN reports r ON f.report_id = r.id
+        WHERE f.category IN (${placeholders})
+      ) ranked
+      WHERE rn <= ?
+      ORDER BY CASE severity
         WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
-        f.confidence DESC
-      LIMIT ?
+        confidence DESC
     `);
-    return stmt.all(...categories, maxPerCategory * categories.length) as FindingRow[];
+    return stmt.all(...categories, maxPerCategory) as FindingRow[];
   }
 
   /** FTS5 full-text search */

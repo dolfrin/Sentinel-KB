@@ -5,9 +5,28 @@
 import * as fs from "fs";
 import * as path from "path";
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
 import { ExtractedFinding } from "./extractor.js";
 import { getDB } from "./db.js";
 import { gateFindings, GateConfig, GatedResult } from "./gate.js";
+
+/** Zod schema for validating AI-returned findings */
+const AIScanFindingSchema = z.object({
+  severity: z.enum(["critical", "high", "medium", "low", "info"]),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  file: z.string().min(1),
+  line: z.number().int().positive().optional(),
+  category: z.string().min(1),
+  recommendation: z.string().default(""),
+  confidence: z.enum(["high", "medium", "low"]),
+  relatedAuditFindings: z.array(z.string()).optional(),
+});
+
+interface BatchResult {
+  findings: AIScanFinding[];
+  warning?: string;
+}
 
 export interface AIScanFinding {
   severity: "critical" | "high" | "medium" | "low" | "info";
@@ -131,7 +150,7 @@ async function analyzeBatch(
   projectDir: string,
   kbContext: string,
   model: string,
-): Promise<AIScanFinding[]> {
+): Promise<BatchResult> {
   // Read file contents
   const fileContents: string[] = [];
   for (const file of files) {
@@ -142,7 +161,7 @@ async function analyzeBatch(
     } catch { continue; }
   }
 
-  if (fileContents.length === 0) return [];
+  if (fileContents.length === 0) return { findings: [] };
 
   const systemPrompt = `You are a world-class security auditor. You have access to a knowledge base of ${kbContext.split("\n").length} real vulnerability findings extracted from professional security audits by firms like Trail of Bits, Cure53, NCC Group, and others.
 
@@ -191,11 +210,41 @@ Analyze the code above. Find real security vulnerabilities based on patterns fro
 
   // Extract JSON from response (may be wrapped in ```json blocks)
   const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) return [];
+  if (!jsonMatch) {
+    // Non-JSON reply (prose, apology, etc.) — flag as incomplete so it surfaces in errors[]
+    if (text.trim().length > 0) {
+      return { findings: [], warning: "model returned non-JSON response (no findings array found)" };
+    }
+    return { findings: [] };
+  }
 
-  const parsed = JSON.parse(jsonMatch[0]) as AIScanFinding[];
+  let rawArray: unknown[];
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed)) return { findings: [] };
+    rawArray = parsed;
+  } catch {
+    throw new Error("JSON parse error");
+  }
+
+  // Validate each element against the zod schema
+  const validated: AIScanFinding[] = [];
+  let dropped = 0;
+  for (const item of rawArray) {
+    const result = AIScanFindingSchema.safeParse(item);
+    if (result.success) {
+      validated.push(result.data as AIScanFinding);
+    } else {
+      dropped++;
+    }
+  }
+
   // Filter to only high/medium confidence
-  return parsed.filter((f) => f.confidence === "high" || f.confidence === "medium");
+  const findings = validated.filter((f) => f.confidence === "high" || f.confidence === "medium");
+  const warning = dropped > 0
+    ? `${dropped}/${rawArray.length} findings dropped (invalid schema)`
+    : undefined;
+  return { findings, warning };
 }
 
 /** Run full AI-powered security scan */
@@ -263,11 +312,17 @@ export async function aiScan(
     console.log(`  [${i + 1}/${batchesToProcess.length}] ${relPaths.join(", ").substring(0, 80)}...`);
 
     try {
-      const findings = await analyzeBatch(client, batch, projectDir, kbContext, model);
-      allFindings.push(...findings);
+      const result = await analyzeBatch(client, batch, projectDir, kbContext, model);
+      allFindings.push(...result.findings);
 
-      if (findings.length > 0) {
-        for (const f of findings) {
+      if (result.warning) {
+        const warnMsg = `Batch ${i + 1}: ${result.warning}`;
+        allErrors.push(warnMsg);
+        console.warn(`  !! ${warnMsg}`);
+      }
+
+      if (result.findings.length > 0) {
+        for (const f of result.findings) {
           const icon = f.severity === "critical" ? "!!" : f.severity === "high" ? "!" : "-";
           console.log(`    ${icon} [${f.severity.toUpperCase()}] ${f.title} (${f.file}:${f.line || "?"})`);
         }

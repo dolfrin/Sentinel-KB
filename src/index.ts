@@ -3,11 +3,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { audit, formatReport } from "./scanner.js";
-import { allRules, Severity } from "./rules.js";
-import { aiScan, formatAIReport } from "./ai-scanner.js";
-import { getDB } from "./db.js";
-import { GateConfig } from "./gate.js";
+import { allRules } from "./rules.js";
+import {
+  runStaticScan,
+  scanFile,
+  runAIScan,
+  searchKB,
+  getStats,
+} from "./service.js";
+import type { Severity } from "./rules.js";
+import type { GateConfig } from "./gate.js";
 
 const server = new McpServer({
   name: "sentinel-kb",
@@ -36,12 +41,11 @@ server.tool(
   },
   async ({ projectPath, categories, severity, includeAllDirs }) => {
     try {
-      const report = audit(projectPath, {
+      const { report, text } = runStaticScan(projectPath, {
         categories: categories as string[] | undefined,
         severity: severity as Severity[] | undefined,
         includeAllDirs,
       });
-      const text = formatReport(report);
       return {
         content: [
           { type: "text", text },
@@ -102,19 +106,14 @@ server.tool(
   },
   async ({ filePath }) => {
     try {
-      const path = await import("path");
-      const dir = path.dirname(filePath);
-      const report = audit(dir, {});
-      const fileFindings = report.findings.filter(
-        (f) => f.file === path.basename(filePath) || filePath.endsWith(f.file)
-      );
+      const findings = scanFile(filePath);
 
-      if (fileFindings.length === 0) {
+      if (findings.length === 0) {
         return { content: [{ type: "text", text: `✅ No findings in ${filePath}` }] };
       }
 
       const lines: string[] = [`Findings in ${filePath}:\n`];
-      for (const f of fileFindings) {
+      for (const f of findings) {
         const icon =
           f.severity === "critical" ? "🔴" : f.severity === "high" ? "🟠" : f.severity === "medium" ? "🟡" : "🔵";
         lines.push(`${icon} [${f.ruleId}] ${f.ruleName} (line ${f.line})`);
@@ -153,21 +152,14 @@ server.tool(
   },
   async ({ projectPath, model, maxBatches, freeLimit, upgradeUrl }) => {
     try {
-      const modelMap: Record<string, string> = {
-        sonnet: "claude-sonnet-4-20250514",
-        opus: "claude-opus-4-20250514",
-        haiku: "claude-haiku-4-5-20251001",
-      };
-
       const gateConfig: GateConfig | undefined =
         freeLimit !== undefined ? { freeLimit, upgradeUrl } : undefined;
 
-      const report = await aiScan(projectPath, {
-        model: model ? modelMap[model] : undefined,
+      const { report, text } = await runAIScan(projectPath, {
+        model: model || undefined,
         maxBatches: maxBatches || undefined,
         gateConfig,
       });
-      const text = formatAIReport(report);
       return {
         content: [
           { type: "text", text },
@@ -188,8 +180,7 @@ server.tool(
   {},
   async () => {
     try {
-      const db = getDB();
-      const stats = db.getStats();
+      const stats = getStats();
 
       const lines: string[] = [];
       lines.push(`Knowledge Base: ${stats.total_findings} findings from ${stats.total_reports} reports by ${stats.total_firms} firms`);
@@ -239,19 +230,14 @@ server.tool(
   },
   async ({ query, category, limit }) => {
     try {
-      const db = getDB();
-      const maxResults = limit || 25;
+      const result = searchKB(query, { category, limit: limit || undefined });
 
-      const results = category
-        ? db.searchFindingsByCategory(query, [category], maxResults)
-        : db.searchFindings(query, maxResults);
-
-      if (results.length === 0) {
+      if (result.findings.length === 0) {
         return { content: [{ type: "text", text: `No findings matching "${query}"` }] };
       }
 
-      const lines: string[] = [`Search: "${query}" — ${results.length} results\n`];
-      for (const r of results) {
+      const lines: string[] = [`Search: "${query}" — ${result.findings.length} results\n`];
+      for (const r of result.findings) {
         lines.push(`[${r.severity.toUpperCase()}] ${r.title}`);
         lines.push(`  ${r.firm} → ${r.target} | ${r.category}${r.cwe ? ` | ${r.cwe}` : ""}`);
         if (r.description) lines.push(`  ${r.description.substring(0, 150)}`);
@@ -261,7 +247,7 @@ server.tool(
       return {
         content: [
           { type: "text", text: lines.join("\n") },
-          { type: "text", text: "\n\nJSON:\n" + JSON.stringify(db.toExtractedFindings(results), null, 2) },
+          { type: "text", text: "\n\nJSON:\n" + JSON.stringify(result.extracted, null, 2) },
         ],
       };
     } catch (err: any) {
