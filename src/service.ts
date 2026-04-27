@@ -4,7 +4,10 @@
 
 import { audit, auditFile, formatReport } from "./scanner.js";
 import { aiScan, formatAIReport } from "./ai-scanner.js";
+import { aiTriageFindings, recalibrateSeverity } from "./ai-triage.js";
+import { formatText, formatJSON, formatSARIF } from "./report.js";
 import { getDB, closeDB } from "./db.js";
+import type { AITriageVerdict } from "./ai-triage.js";
 import {
   isRemoteKB,
   getStats as remoteGetStats,
@@ -39,22 +42,109 @@ export interface ScanOptions {
   severity?: Severity[];
   categories?: string[];
   includeAllDirs?: boolean;
+  /** Run path/context triage (default: true) */
+  triage?: boolean;
+  /** Run Semgrep alongside regex rules (default: false) */
+  semgrep?: boolean;
+  /** Run AI triage (Claude judges each finding) — needs ANTHROPIC_API_KEY */
+  aiTriage?: boolean;
+  /** Min AI confidence to keep findings (default 60) */
+  aiMinConfidence?: number;
+  /** Output format: "text" | "json" | "sarif" (default: "text") */
+  format?: "text" | "json" | "sarif";
+  /** Attach KB precedents to each finding in the report */
+  withKbPrecedents?: boolean;
 }
 
 export interface StaticScanResult {
   report: AuditReport;
   text: string;
+  aiVerdicts?: AITriageVerdict[];
+  aiCostUsd?: number;
 }
 
 /** Run a static regex scan and return both the structured report and formatted text. */
-export function runStaticScan(projectDir: string, options?: ScanOptions): StaticScanResult {
+export async function runStaticScan(projectDir: string, options?: ScanOptions): Promise<StaticScanResult> {
   const report = audit(projectDir, {
     severity: options?.severity,
     categories: options?.categories,
     includeAllDirs: options?.includeAllDirs,
+    triage: options?.triage,
+    semgrep: options?.semgrep,
   });
-  const text = formatReport(report);
-  return { report, text };
+
+  let aiVerdicts: AITriageVerdict[] | undefined;
+  let aiCostUsd: number | undefined;
+
+  if (options?.aiTriage && report.findings.length > 0) {
+    const aiResult = await aiTriageFindings(report.findings, projectDir, {
+      minConfidence: options.aiMinConfidence ?? 60,
+    });
+    if (aiResult.ran) {
+      aiVerdicts = aiResult.verdicts;
+      aiCostUsd = aiResult.costUsd;
+
+      // Replace findings with AI-kept set, recalibrated for severity
+      const recalibrated = recalibrateSeverity(aiResult.kept, aiResult.verdicts);
+
+      // Rebuild issues view from recalibrated findings (preserve grouping)
+      type IssueShape = {
+        ruleId: string;
+        ruleName: string;
+        severity: Severity;
+        category: string;
+        message: string;
+        occurrences: Array<{ file: string; line: number; snippet: string; message: string }>;
+        displayedOccurrences: Array<{ file: string; line: number; snippet: string; message: string }>;
+        totalOccurrences: number;
+      };
+      const SEV_ORDER: Severity[] = ["critical", "high", "medium", "low", "info"];
+      const issueMap = new Map<string, IssueShape>();
+      for (const f of recalibrated) {
+        let entry = issueMap.get(f.ruleId);
+        if (!entry) {
+          entry = {
+            ruleId: f.ruleId,
+            ruleName: f.ruleName,
+            severity: f.severity,
+            category: f.category,
+            message: f.message,
+            occurrences: [],
+            displayedOccurrences: [],
+            totalOccurrences: 0,
+          };
+          issueMap.set(f.ruleId, entry);
+        }
+        entry.occurrences.push({ file: f.file, line: f.line, snippet: f.snippet, message: f.message });
+        if (SEV_ORDER.indexOf(f.severity) < SEV_ORDER.indexOf(entry.severity)) {
+          entry.severity = f.severity;
+        }
+      }
+      const newIssues = Array.from(issueMap.values()).map((i) => ({
+        ...i,
+        displayedOccurrences: i.occurrences.slice(0, 3),
+        totalOccurrences: i.occurrences.length,
+      }));
+      report.issues = newIssues;
+      report.findings = recalibrated;
+      report.totalIssues = newIssues.length;
+      report.summary = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+      for (const i of newIssues) report.summary[i.severity]++;
+    }
+  }
+
+  const enrich = {
+    aiVerdicts,
+    withKbPrecedents: options?.withKbPrecedents ?? false,
+  };
+
+  const format = options?.format ?? "text";
+  let text: string;
+  if (format === "json") text = formatJSON(report, enrich);
+  else if (format === "sarif") text = formatSARIF(report, enrich);
+  else text = formatText(report, enrich);
+
+  return { report, text, aiVerdicts, aiCostUsd };
 }
 
 // ─── Single file scan ───────────────────────────────────────

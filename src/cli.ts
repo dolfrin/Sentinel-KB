@@ -22,16 +22,27 @@ function usage() {
   sentinel-kb \u2014 AI-powered security vulnerability scanner
 
   Usage:
-    sentinel-kb scan <path> [--severity critical|high|medium|low|info] [--category <cat>] [--include-all-dirs] [--json]
+    sentinel-kb scan <path> [scan flags]
     sentinel-kb ai <path> [--model sonnet|opus|haiku] [--max-batches <n>] [--json]
     sentinel-kb stats
     sentinel-kb search <query> [--limit N] [--json]
     sentinel-kb migrate
     sentinel-kb update [--regex] [--ai-model <model>] [--concurrency <n>]
 
+  Scan flags:
+    --severity <level>     Threshold: "high" includes high + critical
+    --category <cat>       Filter to single category
+    --include-all-dirs     Scan dirs that are normally skipped (tests, docs, etc.)
+    --no-triage            Disable path/context triage (raw output)
+    --semgrep              Run Semgrep alongside regex rules (needs semgrep CLI)
+    --ai-triage            AI judges each finding (needs ANTHROPIC_API_KEY)
+    --min-confidence <n>   Minimum AI confidence to keep findings (default 60)
+    --with-kb              Attach KB precedents to each finding in the report
+    --sarif                Emit SARIF 2.1.0 (GitHub Code Scanning native)
+    --json                 Emit structured JSON
+
   Commands:
     scan      Static security scan (free, fast, offline)
-              --severity uses threshold: "high" includes high + critical
     ai        AI-powered deep scan with KB context
     stats     Knowledge base statistics
     search    Full-text search the vulnerability KB (default limit: 25)
@@ -179,17 +190,33 @@ async function main() {
     // Parse --include-all-dirs flag
     const includeAllDirs = args.includes("--include-all-dirs");
 
+    // New optional flags for the upgraded scanner
+    const useSemgrep = args.includes("--semgrep");
+    const useAiTriage = args.includes("--ai-triage");
+    const noTriage = args.includes("--no-triage");
+    const withKbPrecedents = args.includes("--with-kb");
+    const sarif = args.includes("--sarif");
+    const minConfIdx = args.indexOf("--min-confidence");
+    const aiMinConfidence = minConfIdx >= 0 ? parseInt(args[minConfIdx + 1] || "60", 10) : undefined;
+
+    const format: "text" | "json" | "sarif" = sarif ? "sarif" : useJson ? "json" : "text";
+
     console.log(`\nStatic scan: ${projectPath}${includeAllDirs ? " (including all dirs)" : ""}\n`);
-    const { report, text } = runStaticScan(projectPath, {
+    const { report, text, aiCostUsd } = await runStaticScan(projectPath, {
       severity: severityFilter,
       categories: categoryFilter,
       includeAllDirs,
+      triage: !noTriage,
+      semgrep: useSemgrep,
+      aiTriage: useAiTriage,
+      aiMinConfidence,
+      withKbPrecedents,
+      format,
     });
 
-    if (useJson) {
-      console.log(JSON.stringify(report, null, 2));
-    } else {
-      console.log(text);
+    console.log(text);
+    if (aiCostUsd !== undefined) {
+      console.error(`\nAI triage cost: $${aiCostUsd.toFixed(4)}`);
     }
 
     process.exit(report.summary.critical > 0 ? 2 : report.summary.high > 0 ? 1 : 0);

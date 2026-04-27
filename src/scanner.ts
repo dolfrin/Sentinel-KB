@@ -2,6 +2,8 @@ import * as fs from "fs";
 import * as path from "path";
 import picomatch from "picomatch";
 import { Rule, Severity, allRules } from "./rules.js";
+import { triageFindings, TriageDecision } from "./triage.js";
+import { runSemgrep, isSemgrepAvailable, SemgrepOptions } from "./semgrep.js";
 
 /** Numeric severity ranking — lower value = more severe */
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
@@ -65,6 +67,11 @@ export interface AuditReport {
   summary: Record<Severity, number>;   // Counts deduped findings (backward compat)
   categories: Record<string, number>;  // Counts deduped findings (backward compat)
   totalIssues?: number;                // Number of distinct issues (rules that fired)
+  triage?: {                           // Phase-1 triage results (FP filtering, severity adjustments)
+    droppedCount: number;
+    downgradedCount: number;
+    decisions: TriageDecision[];
+  };
 }
 
 // Directories that are ALWAYS skipped — build artifacts, dependencies, VCS
@@ -312,7 +319,16 @@ export function auditFile(filePath: string, options?: { categories?: string[]; s
 }
 
 /** Run full audit on a project directory */
-export function audit(projectDir: string, options?: { categories?: string[]; severity?: Severity[]; includeAllDirs?: boolean }): AuditReport {
+export function audit(
+  projectDir: string,
+  options?: {
+    categories?: string[];
+    severity?: Severity[];
+    includeAllDirs?: boolean;
+    triage?: boolean;
+    semgrep?: boolean | SemgrepOptions;
+  }
+): AuditReport {
   // Expand severity filter: each provided level acts as a minimum threshold,
   // so ["high"] includes critical + high, ["medium"] includes critical + high + medium, etc.
   const expandedSeverities = options?.severity ? expandSeverityThresholds(options.severity) : null;
@@ -451,12 +467,36 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
     }
   }
 
+  // ── Optional Semgrep pass: AST-based analysis ─────────────────
+  // Off by default — enable with options.semgrep = true (or pass config object).
+  // Returns no findings if semgrep CLI is not installed.
+  if (options?.semgrep) {
+    const semgrepOptions = typeof options.semgrep === "object" ? options.semgrep : undefined;
+    const semgrepFindings = runSemgrep(projectDir, semgrepOptions);
+    allFindings.push(...semgrepFindings);
+  }
+
+  // ── Triage: filter false positives and downgrade severity by context ──
+  // Default: enabled. Set options.triage = false to skip (debugging / raw output).
+  const triageEnabled = options?.triage !== false;
+  let triagedFindings: Finding[] = allFindings;
+  let triageDecisions: TriageDecision[] = [];
+  let triageDropped = 0;
+  let triageDowngraded = 0;
+  if (triageEnabled) {
+    const result = triageFindings(allFindings, projectDir);
+    triagedFindings = result.kept;
+    triageDecisions = [...result.dropped, ...result.downgraded];
+    triageDropped = result.dropped.length;
+    triageDowngraded = result.downgraded.length;
+  }
+
   // ── Build Issue[] (aggregated view: one Issue per ruleId) ──
   // Group all raw findings by ruleId, preserving insertion order.
   const MAX_PER_RULE = 3;
   const issueMap = new Map<string, { meta: Finding; occurrences: Occurrence[] }>();
 
-  for (const f of allFindings) {
+  for (const f of triagedFindings) {
     let entry = issueMap.get(f.ruleId);
     if (!entry) {
       entry = { meta: f, occurrences: [] };
@@ -528,6 +568,11 @@ export function audit(projectDir: string, options?: { categories?: string[]; sev
     summary,
     categories,
     totalIssues: issues.length,
+    triage: triageEnabled ? {
+      droppedCount: triageDropped,
+      downgradedCount: triageDowngraded,
+      decisions: triageDecisions,
+    } : undefined,
   };
 }
 
@@ -551,6 +596,12 @@ export function formatReport(report: AuditReport): string {
   lines.push(
     `  🔴 CRITICAL: ${report.summary.critical}  🟠 HIGH: ${report.summary.high}  🟡 MEDIUM: ${report.summary.medium}  🔵 LOW: ${report.summary.low}`
   );
+
+  if (report.triage) {
+    lines.push(
+      `  Triage: ${report.triage.droppedCount} false positives dropped, ${report.triage.downgradedCount} downgraded by context`
+    );
+  }
 
   lines.push("───────────────────────────────────────────────────────");
 

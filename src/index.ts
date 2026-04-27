@@ -83,7 +83,7 @@ server.tool(
   async ({ projectPath, categories, severity, includeAllDirs }) => {
     try {
       const validatedPath = validateProjectPath(projectPath);
-      const { report, text } = runStaticScan(validatedPath, {
+      const { report, text } = await runStaticScan(validatedPath, {
         categories: categories as string[] | undefined,
         severity: severity as Severity[] | undefined,
         includeAllDirs,
