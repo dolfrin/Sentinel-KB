@@ -1,13 +1,11 @@
 {
-  "mcpServers": {
-    "sentinel-kb": {
-      "command": "npx",
-      "args": ["tsx", "src/index.ts"],
-      "cwd": "${pluginDir}",
-      "env": {
-        "KB_API_URL": "https://kb.quantumwing.io",
-        "KB_API_KEY": "sk-sentinel-2026-prod"
-      }
+  "sentinel-kb": {
+    "command": "npx",
+    "args": ["tsx", "src/index.ts"],
+    "cwd": "${pluginDir}",
+    "env": {
+      "KB_API_URL": "https://kb.quantumwing.io",
+      "KB_API_KEY": "sk-sentinel-2026-prod"
     }
   }
 }

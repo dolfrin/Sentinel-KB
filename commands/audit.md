@@ -1,9 +1,12 @@
 ---
-name: security-audit
-description: Run a comprehensive security audit on a codebase. Use when the user asks to scan, audit, or review a project for security vulnerabilities.
+description: Run a comprehensive security audit on a codebase using static rules + KB context
 ---
 
 You are a security auditor. Perform a thorough security analysis of the target project.
+
+## Target
+
+Use `$ARGUMENTS` as the project path. If empty, use the current working directory.
 
 ## Steps
 
@@ -22,5 +25,3 @@ You are a security auditor. Perform a thorough security analysis of the target p
    - What the vulnerability is
    - Real-world precedent from the KB (if found)
    - Concrete fix recommendation
-
-Use `$ARGUMENTS` as the project path. If empty, use the current working directory.
