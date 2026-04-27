@@ -72,6 +72,8 @@ export interface AuditReport {
     downgradedCount: number;
     decisions: TriageDecision[];
   };
+  /** Which engines/layers ran during this audit. Set automatically when auto-mode is used. */
+  enginesUsed?: string[];
 }
 
 // Directories that are ALWAYS skipped — build artifacts, dependencies, VCS
@@ -327,8 +329,23 @@ export function audit(
     includeAllDirs?: boolean;
     triage?: boolean;
     semgrep?: boolean | SemgrepOptions;
+    /**
+     * Auto mode: scanner picks which layers to run based on what's available.
+     * - regex: always
+     * - triage: always (free, fast)
+     * - semgrep: if `semgrep` CLI is installed
+     * AI triage is NOT included here — it requires async I/O and is invoked at the service layer.
+     */
+    auto?: boolean;
   }
 ): AuditReport {
+  // Resolve auto mode → concrete options
+  const autoTriage = options?.auto ? true : options?.triage;
+  const autoSemgrep = options?.auto
+    ? (options?.semgrep === false ? false : isSemgrepAvailable())
+    : options?.semgrep;
+  // Track which engines actually run
+  const enginesUsed: string[] = ["regex"];
   // Expand severity filter: each provided level acts as a minimum threshold,
   // so ["high"] includes critical + high, ["medium"] includes critical + high + medium, etc.
   const expandedSeverities = options?.severity ? expandSeverityThresholds(options.severity) : null;
@@ -470,15 +487,19 @@ export function audit(
   // ── Optional Semgrep pass: AST-based analysis ─────────────────
   // Off by default — enable with options.semgrep = true (or pass config object).
   // Returns no findings if semgrep CLI is not installed.
-  if (options?.semgrep) {
-    const semgrepOptions = typeof options.semgrep === "object" ? options.semgrep : undefined;
+  if (autoSemgrep) {
+    const semgrepOptions = typeof options?.semgrep === "object" ? options.semgrep : undefined;
     const semgrepFindings = runSemgrep(projectDir, semgrepOptions);
+    if (semgrepFindings.length > 0 || isSemgrepAvailable()) {
+      enginesUsed.push("semgrep");
+    }
     allFindings.push(...semgrepFindings);
   }
 
   // ── Triage: filter false positives and downgrade severity by context ──
   // Default: enabled. Set options.triage = false to skip (debugging / raw output).
-  const triageEnabled = options?.triage !== false;
+  const triageEnabled = autoTriage !== false;
+  if (triageEnabled) enginesUsed.push("triage");
   let triagedFindings: Finding[] = allFindings;
   let triageDecisions: TriageDecision[] = [];
   let triageDropped = 0;
@@ -573,6 +594,7 @@ export function audit(
       downgradedCount: triageDowngraded,
       decisions: triageDecisions,
     } : undefined,
+    enginesUsed,
   };
 }
 

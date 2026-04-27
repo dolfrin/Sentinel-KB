@@ -64,7 +64,7 @@ const server = new McpServer({
 
 server.tool(
   "audit",
-  "Run a comprehensive static security scan on a codebase. Scans for vulnerabilities across OWASP categories including injection, XSS, cryptography, authentication, secrets exposure, and more.",
+  "Run a comprehensive static security scan on a codebase. Scans for vulnerabilities across OWASP categories including injection, XSS, cryptography, authentication, secrets exposure, and more. Set auto=true to let the scanner pick engines (Semgrep if installed, AI triage if ANTHROPIC_API_KEY is set, KB precedents for context).",
   {
     projectPath: z.string().describe("Absolute path to the project root directory"),
     categories: z
@@ -79,14 +79,19 @@ server.tool(
       .boolean()
       .optional()
       .describe("If true, scan directories normally skipped by default (docs, tests, examples, etc.)"),
+    auto: z
+      .boolean()
+      .optional()
+      .describe("Auto-pick engines based on availability: Semgrep if CLI installed, AI triage if API key set, KB precedents always. Recommended default."),
   },
-  async ({ projectPath, categories, severity, includeAllDirs }) => {
+  async ({ projectPath, categories, severity, includeAllDirs, auto }) => {
     try {
       const validatedPath = validateProjectPath(projectPath);
       const { report, text } = await runStaticScan(validatedPath, {
         categories: categories as string[] | undefined,
         severity: severity as Severity[] | undefined,
         includeAllDirs,
+        auto,
       });
       return {
         content: [

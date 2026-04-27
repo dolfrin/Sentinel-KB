@@ -98,6 +98,9 @@ export function formatText(report: AuditReport, enrich?: ReportEnrichment): stri
       `  Triage:   -${report.triage.droppedCount} false positives, ${report.triage.downgradedCount} severity downgrades`
     );
   }
+  if (report.enginesUsed && report.enginesUsed.length > 0) {
+    lines.push(`  Engines:  ${report.enginesUsed.join(" + ")}`);
+  }
   lines.push("───────────────────────────────────────────────────────");
 
   if (issues.length === 0) {

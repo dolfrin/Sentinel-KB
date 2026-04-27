@@ -54,6 +54,15 @@ export interface ScanOptions {
   format?: "text" | "json" | "sarif";
   /** Attach KB precedents to each finding in the report */
   withKbPrecedents?: boolean;
+  /**
+   * Auto mode: pick engines automatically based on what's available.
+   * - regex + triage: always
+   * - semgrep: if CLI is installed
+   * - ai-triage: if ANTHROPIC_API_KEY is set
+   * - kb-precedents: if KB has data
+   * Explicit options (semgrep, aiTriage, withKbPrecedents) override auto detection.
+   */
+  auto?: boolean;
 }
 
 export interface StaticScanResult {
@@ -65,24 +74,36 @@ export interface StaticScanResult {
 
 /** Run a static regex scan and return both the structured report and formatted text. */
 export async function runStaticScan(projectDir: string, options?: ScanOptions): Promise<StaticScanResult> {
+  // Resolve auto mode → concrete options
+  const auto = options?.auto === true;
+  const useSemgrep = options?.semgrep !== undefined ? options.semgrep : auto;       // auto picks if CLI present (scanner re-checks)
+  const useAiTriage = options?.aiTriage !== undefined
+    ? options.aiTriage
+    : (auto && Boolean(process.env.ANTHROPIC_API_KEY));
+  const useKbPrecedents = options?.withKbPrecedents !== undefined
+    ? options.withKbPrecedents
+    : auto;
+
   const report = audit(projectDir, {
     severity: options?.severity,
     categories: options?.categories,
     includeAllDirs: options?.includeAllDirs,
     triage: options?.triage,
-    semgrep: options?.semgrep,
+    semgrep: useSemgrep,
+    auto,
   });
 
   let aiVerdicts: AITriageVerdict[] | undefined;
   let aiCostUsd: number | undefined;
 
-  if (options?.aiTriage && report.findings.length > 0) {
+  if (useAiTriage && report.findings.length > 0) {
     const aiResult = await aiTriageFindings(report.findings, projectDir, {
-      minConfidence: options.aiMinConfidence ?? 60,
+      minConfidence: options?.aiMinConfidence ?? 60,
     });
     if (aiResult.ran) {
       aiVerdicts = aiResult.verdicts;
       aiCostUsd = aiResult.costUsd;
+      report.enginesUsed = [...(report.enginesUsed ?? []), "ai-triage"];
 
       // Replace findings with AI-kept set, recalibrated for severity
       const recalibrated = recalibrateSeverity(aiResult.kept, aiResult.verdicts);
@@ -133,9 +154,13 @@ export async function runStaticScan(projectDir: string, options?: ScanOptions): 
     }
   }
 
+  if (useKbPrecedents) {
+    report.enginesUsed = [...(report.enginesUsed ?? []), "kb-precedents"];
+  }
+
   const enrich = {
     aiVerdicts,
-    withKbPrecedents: options?.withKbPrecedents ?? false,
+    withKbPrecedents: useKbPrecedents,
   };
 
   const format = options?.format ?? "text";

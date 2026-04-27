@@ -30,14 +30,15 @@ function usage() {
     sentinel-kb update [--regex] [--ai-model <model>] [--concurrency <n>]
 
   Scan flags:
+    --auto                 Auto-pick engines: semgrep if installed, ai-triage if API key set, KB precedents
     --severity <level>     Threshold: "high" includes high + critical
     --category <cat>       Filter to single category
     --include-all-dirs     Scan dirs that are normally skipped (tests, docs, etc.)
     --no-triage            Disable path/context triage (raw output)
-    --semgrep              Run Semgrep alongside regex rules (needs semgrep CLI)
-    --ai-triage            AI judges each finding (needs ANTHROPIC_API_KEY)
+    --semgrep              Force-enable Semgrep (needs semgrep CLI)
+    --ai-triage            Force-enable AI judging (needs ANTHROPIC_API_KEY)
     --min-confidence <n>   Minimum AI confidence to keep findings (default 60)
-    --with-kb              Attach KB precedents to each finding in the report
+    --with-kb              Force-attach KB precedents to each finding
     --sarif                Emit SARIF 2.1.0 (GitHub Code Scanning native)
     --json                 Emit structured JSON
 
@@ -190,18 +191,19 @@ async function main() {
     // Parse --include-all-dirs flag
     const includeAllDirs = args.includes("--include-all-dirs");
 
-    // New optional flags for the upgraded scanner
-    const useSemgrep = args.includes("--semgrep");
-    const useAiTriage = args.includes("--ai-triage");
+    // Auto mode picks engines based on what's available; explicit flags override.
+    const auto = args.includes("--auto");
+    const useSemgrep = args.includes("--semgrep") || (auto ? undefined : false);
+    const useAiTriage = args.includes("--ai-triage") || (auto ? undefined : false);
     const noTriage = args.includes("--no-triage");
-    const withKbPrecedents = args.includes("--with-kb");
+    const withKbPrecedents = args.includes("--with-kb") || (auto ? undefined : false);
     const sarif = args.includes("--sarif");
     const minConfIdx = args.indexOf("--min-confidence");
     const aiMinConfidence = minConfIdx >= 0 ? parseInt(args[minConfIdx + 1] || "60", 10) : undefined;
 
     const format: "text" | "json" | "sarif" = sarif ? "sarif" : useJson ? "json" : "text";
 
-    console.log(`\nStatic scan: ${projectPath}${includeAllDirs ? " (including all dirs)" : ""}\n`);
+    console.log(`\nStatic scan: ${projectPath}${includeAllDirs ? " (including all dirs)" : ""}${auto ? " (auto mode)" : ""}\n`);
     const { report, text, aiCostUsd } = await runStaticScan(projectPath, {
       severity: severityFilter,
       categories: categoryFilter,
@@ -212,6 +214,7 @@ async function main() {
       aiMinConfidence,
       withKbPrecedents,
       format,
+      auto,
     });
 
     console.log(text);

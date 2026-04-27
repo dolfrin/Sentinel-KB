@@ -10,7 +10,14 @@ Use `$ARGUMENTS` as the project path. If empty, use the current working director
 
 ## Steps
 
-1. **Static scan first**: Call the `audit` MCP tool with the project path to get instant results from 287 detection rules covering OWASP categories (injection, XSS, crypto, auth, secrets, etc.)
+1. **Static scan first**: Call the `audit` MCP tool with `auto: true` and the project path. Auto mode picks the best available engines:
+   - regex rules (always — 287 OWASP-aligned patterns)
+   - path/context triage (always — drops FPs in test code, configs, etc.)
+   - Semgrep AST analysis (if `semgrep` CLI is installed)
+   - AI triage (if `ANTHROPIC_API_KEY` is set — Claude judges each finding)
+   - KB precedents (always — links findings to real audits)
+
+   The report's `enginesUsed` field shows which layers actually ran. Mention them to the user.
 
 2. **Search the knowledge base**: Based on what the static scan finds, use `search-kb` to find similar real-world vulnerabilities from 15,800+ professional audit findings. Search by category, CWE, or pattern name. This gives you context on how these issues were exploited and fixed in real audits by firms like Trail of Bits, Cure53, NCC Group, etc.
 
