@@ -76,7 +76,7 @@ export interface StaticScanResult {
 export async function runStaticScan(projectDir: string, options?: ScanOptions): Promise<StaticScanResult> {
   // Resolve auto mode → concrete options
   const auto = options?.auto === true;
-  const useSemgrep = options?.semgrep !== undefined ? options.semgrep : auto;       // auto picks if CLI present (scanner re-checks)
+  const useSemgrep = options?.semgrep !== undefined ? options.semgrep : auto;
   const useAiTriage = options?.aiTriage !== undefined
     ? options.aiTriage
     : (auto && Boolean(process.env.ANTHROPIC_API_KEY));
