@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Sentinel-KB** — Last updated: April 13, 2026
+**Sentinel-KB** — Last updated: April 28, 2026
 
 ## What Sentinel-KB does
 
@@ -9,9 +9,18 @@ Sentinel-KB is a security vulnerability scanner that can run as a Claude Code pl
 ## Data flows
 
 ### Static scan (local)
-- Runs entirely on your machine
+- Runs entirely on your machine — regex, triage, and Semgrep (if installed) all execute locally
 - No code, files, or scan results leave your device
 - No data is collected, stored, or transmitted
+
+### Triage layer (local)
+- Reads source files locally to detect test blocks, config files, and per-rule context
+- Stays on your machine; no network calls
+
+### Semgrep (local, optional)
+- Only runs when `semgrep` CLI is installed locally
+- Sentinel-KB invokes the local CLI as a subprocess; output stays on your machine
+- Semgrep's own metrics reporting is disabled (`--metrics off`) so Semgrep itself does not phone home
 
 ### Claude Code plugin usage
 - When you use Sentinel-KB inside Claude Code, Claude Code itself may read and analyze files from your workspace as part of the normal Claude Code product experience
@@ -25,12 +34,17 @@ Sentinel-KB is a security vulnerability scanner that can run as a Claude Code pl
 - We do **not** collect, store, or transmit any of your source code
 - No cookies, no tracking, no analytics
 
-### Standalone AI scan / extraction (`ANTHROPIC_API_KEY`)
-- If you run Sentinel-KB outside Claude Code using the standalone CLI or MCP server AI features, and you explicitly enable AI scan or AI extraction, relevant source code excerpts or report text may be sent to Anthropic's API for analysis
-- This standalone AI path uses `ANTHROPIC_API_KEY`
-- This does not happen during static scan
-- Anthropic processes those requests under Anthropic's own terms and privacy practices
-- You are responsible for deciding whether the code or report content you send to Anthropic may be processed by a third-party AI provider
+### Standalone AI scan, AI triage, and extraction (`ANTHROPIC_API_KEY`)
+- If you run Sentinel-KB outside Claude Code (CLI / MCP server / CI) and you explicitly enable any of:
+  - `ai-audit` (deep AI-powered scan)
+  - `--ai-triage` (per-finding judgment by Claude)
+  - AI-mode KB extraction
+  ...then relevant source code excerpts or report text are sent to Anthropic's API for analysis.
+- The AI triage path sends, per finding: a 30-line code window around the finding, the static-rule metadata, and the top KB matches by category. No full-file uploads.
+- All these paths require `ANTHROPIC_API_KEY` and are off by default (only run when you enable them).
+- This does not happen during a static scan, triage, or auto mode without the key — auto mode silently skips AI triage when no key is set.
+- Anthropic processes these requests under Anthropic's own terms and privacy practices.
+- You are responsible for deciding whether the code you send to Anthropic may be processed by a third-party AI provider.
 
 ## Data storage
 

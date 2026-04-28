@@ -24,11 +24,34 @@ src/
 ├── update.ts        # Full pipeline: crawl → download → extract → DB
 ├── ai-scanner.ts    # AI code scanner: KB context + Claude → finds vulnerabilities
 ├── scanner.ts       # Static regex scanner (fast, offline, free tier)
+├── triage.ts        # Path/context FP filtering: config files, test blocks, per-rule checks
+├── semgrep.ts       # Optional Semgrep AST engine (no-op if CLI missing)
+├── ai-triage.ts     # AI triage: Claude judges each finding with KB context
+├── report.ts        # Output formatters: text / JSON / SARIF 2.1.0
 ├── rules.ts         # Static scan rules (crypto, auth, injection, WebRTC, Android, Rust, etc.)
+├── service.ts       # Orchestrator: wires regex → triage → semgrep → ai-triage → report
 ├── gate.ts          # Freemium gate: checks API key, enforces free/paid tier limits
+├── kb-api.ts        # Hosted HTTP API for the knowledge base
+├── kb-client.ts     # Remote KB client (used when KB_API_URL is set)
 ├── index.ts         # MCP server (6 tools)
 └── cli.ts           # CLI: scan, ai, stats, search, migrate, update
 ```
+
+### Scan pipeline
+
+`runStaticScan()` (in `service.ts`) is the entry point used by both the CLI
+and the MCP `audit` tool. With `auto: true` it picks engines based on the
+environment:
+
+1. **regex** — always (`scanner.ts`, `rules.ts`)
+2. **triage** — always (`triage.ts`)
+3. **semgrep** — if `semgrep --version` succeeds (`semgrep.ts`)
+4. **ai-triage** — if `ANTHROPIC_API_KEY` is set (`ai-triage.ts`)
+5. **kb-precedents** — always in auto mode (`report.ts` looks up `db.searchFindingsByCategory`)
+
+`AuditReport.enginesUsed[]` lists which layers actually ran. Output is rendered
+by `report.ts` (text / JSON / SARIF) — `scanner.ts` no longer formats reports
+directly.
 
 ## Database
 
@@ -68,6 +91,12 @@ npx tsx src/cli.ts ai /path/to/project --model sonnet
 
 # Static scan (free, no API needed)
 npx tsx src/cli.ts scan /path/to/project
+
+# Auto mode — picks regex + triage + semgrep + ai-triage + kb-precedents based on availability
+npx tsx src/cli.ts scan /path/to/project --auto
+
+# SARIF output for GitHub Code Scanning
+npx tsx src/cli.ts scan /path/to/project --auto --sarif > findings.sarif
 ```
 
 ## MCP Tools (6)

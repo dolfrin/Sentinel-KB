@@ -1,6 +1,6 @@
 {
   "name": "sentinel-kb",
-  "description": "AI-powered security vulnerability scanner backed by 15,800+ real findings from 85 professional audit firms. Static scan is instant and offline. Knowledge base provides context from Trail of Bits, Cure53, NCC Group, and 80+ more firms.",
+  "description": "Security vulnerability scanner backed by 15,800+ real findings from 85 professional audit firms. Layered pipeline: regex (287 rules) → context-aware triage → optional Semgrep AST → optional AI triage with KB precedents. Auto mode picks engines based on what's installed. Output: text, JSON, or SARIF.",
   "version": "0.1.0",
   "author": {
     "name": "dolfrin"

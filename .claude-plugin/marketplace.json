@@ -9,7 +9,7 @@
     {
       "name": "sentinel-kb",
       "source": "./",
-      "description": "AI-powered security scanner with 287 static rules and a knowledge base of 15,800+ real vulnerabilities from Trail of Bits, Cure53, NCC Group, and 80+ more audit firms.",
+      "description": "Security scanner with 287 static rules + a 15,800-finding knowledge base from 85 audit firms. Layered pipeline (regex → triage → Semgrep → AI triage), auto-picks engines, outputs text/JSON/SARIF.",
       "version": "0.1.0",
       "author": {
         "name": "dolfrin",

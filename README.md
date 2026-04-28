@@ -20,6 +20,17 @@ Unlike synthetic rule sets, every pattern in the knowledge base traces back to a
 
 Works as a **Claude Code plugin**, a **CLI tool**, and an **MCP server**.
 
+### Pipeline
+
+Sentinel-KB chains four engines, each one cutting false positives further:
+
+1. **Regex** (always) -- 287 OWASP-aligned patterns, instant, offline
+2. **Triage** (always) -- drops findings on config files (`google-services.json`, lockfiles, `*.example`), downgrades severity in test paths and inline `#[cfg(test)]` blocks, applies per-rule context checks (Axum extractors, Android `LAUNCHER` activities, `withSessionLock` wrappers, etc.)
+3. **Semgrep** (optional) -- AST-based analysis when `semgrep` CLI is installed
+4. **AI triage** (optional) -- Claude Sonnet judges each finding against the knowledge base when `ANTHROPIC_API_KEY` is set
+
+Auto mode picks engines based on what's available -- no setup, no flags.
+
 Marketplace note: this repository can be installed locally as a Claude Code plugin. If an official marketplace listing is published later, installation can use the marketplace flow instead.
 
 ## Quick Start
@@ -33,13 +44,16 @@ cd Sentinel-KB
 claude plugin add .
 
 # Run a security audit on any project
-claude> /security-audit /path/to/project
+claude> /sentinel-kb:audit /path/to/project
 
 # Search the knowledge base
-claude> /search-vulns "nonce reuse AES-GCM"
+claude> /sentinel-kb:search "nonce reuse AES-GCM"
 
 # Scan a single file
-claude> /scan-file src/auth/login.ts
+claude> /sentinel-kb:scan-file src/auth/login.ts
+
+# Show KB statistics
+claude> /sentinel-kb:stats
 ```
 
 ### CLI
@@ -49,7 +63,10 @@ git clone https://github.com/dolfrin/Sentinel-KB.git
 cd Sentinel-KB
 npm install
 
-# Static scan (free, instant, offline)
+# Auto mode -- picks the best engines available (recommended)
+npx tsx src/cli.ts scan /path/to/project --auto
+
+# Plain regex scan (fastest)
 npx tsx src/cli.ts scan /path/to/project
 
 # Search the knowledge base
@@ -57,6 +74,9 @@ npx tsx src/cli.ts search "SQL injection parameterized"
 
 # View KB statistics
 npx tsx src/cli.ts stats
+
+# SARIF output for GitHub Code Scanning
+npx tsx src/cli.ts scan /path/to/project --auto --sarif > findings.sarif
 ```
 
 ## What Makes It Different
@@ -90,16 +110,16 @@ The 287 rules cover 33 security categories:
 
 Every rule includes CWE identifiers, severity ratings, and targeted file patterns.
 
-## Skills
+## Slash Commands
 
-When installed as a Claude Code plugin, Sentinel-KB provides four skills:
+When installed as a Claude Code plugin, Sentinel-KB exposes four slash commands:
 
-| Skill | Description |
-|-------|-------------|
-| `/security-audit` | Full security audit -- runs static scan, searches KB for context, then Claude analyzes flagged code for real vulnerabilities and false positives |
-| `/search-vulns` | Search the knowledge base by pattern, CWE, category, or attack type. Returns real findings from professional audits |
-| `/scan-file` | Quick scan of a single file with automatic triage of results |
-| `/kb-stats` | Knowledge base statistics: total findings, reports, firms, severity breakdown |
+| Command | Description |
+|---------|-------------|
+| `/sentinel-kb:audit [path]` | Comprehensive audit in auto mode -- runs all available engines (regex + triage + Semgrep + AI triage + KB precedents), groups findings by category, links each to similar real-world audits |
+| `/sentinel-kb:search <query>` | Full-text search the knowledge base by pattern, CWE, category, or attack type |
+| `/sentinel-kb:scan-file <path>` | Quick scan of a single file with automatic triage |
+| `/sentinel-kb:stats` | Knowledge base statistics: total findings, reports, firms, severity breakdown |
 
 ## MCP Tools
 
@@ -107,8 +127,8 @@ The MCP server exposes six tools for programmatic access:
 
 | Tool | Description | Tier |
 |------|-------------|------|
-| `audit` | Full static scan of a project directory | Free |
-| `ai-audit` | AI-powered scan with KB context | Requires API key |
+| `audit` | Full project scan; pass `auto: true` to enable Semgrep / AI triage when available | Free |
+| `ai-audit` | AI-powered scan with KB context, batched | Requires API key |
 | `list-rules` | List all 287 detection rules | Free |
 | `scan-file` | Scan a single file | Free |
 | `kb-stats` | Knowledge base statistics | Free |
@@ -117,14 +137,32 @@ The MCP server exposes six tools for programmatic access:
 ## CLI Usage
 
 ```bash
-# Static scan -- instant, offline, no API key needed
+# Auto mode -- picks the best engines available (recommended)
+npx tsx src/cli.ts scan /path/to/project --auto
+
+# Plain static scan -- instant, offline, no API key needed
 npx tsx src/cli.ts scan /path/to/project
+
+# Force-enable Semgrep (needs `pip install semgrep`)
+npx tsx src/cli.ts scan /path/to/project --semgrep
+
+# Force-enable AI triage (needs ANTHROPIC_API_KEY)
+ANTHROPIC_API_KEY=sk-... npx tsx src/cli.ts scan /path/to/project --ai-triage
+
+# Disable triage layer (raw regex output, useful for debugging)
+npx tsx src/cli.ts scan /path/to/project --no-triage
+
+# Attach KB precedents (real-world audit findings) to each result
+npx tsx src/cli.ts scan /path/to/project --with-kb
+
+# SARIF 2.1.0 output for GitHub Code Scanning
+npx tsx src/cli.ts scan /path/to/project --auto --sarif > findings.sarif
+
+# JSON output
+npx tsx src/cli.ts scan /path/to/project --json
 
 # Search the knowledge base
 npx tsx src/cli.ts search "buffer overflow heap"
-
-# AI-powered scan (requires ANTHROPIC_API_KEY)
-ANTHROPIC_API_KEY=sk-... npx tsx src/cli.ts ai /path/to/project
 
 # Show knowledge base statistics
 npx tsx src/cli.ts stats
@@ -133,42 +171,67 @@ npx tsx src/cli.ts stats
 npx tsx src/update.ts
 ```
 
+### Scan flags
+
+| Flag | Effect |
+|------|--------|
+| `--auto` | Pick engines automatically based on what's available |
+| `--severity <level>` | Threshold: `high` includes `high + critical` |
+| `--category <cat>` | Filter to a single category |
+| `--include-all-dirs` | Scan dirs that are normally skipped (tests, docs, etc.) |
+| `--no-triage` | Disable path/context triage |
+| `--semgrep` | Force-enable Semgrep (needs `semgrep` CLI) |
+| `--ai-triage` | Force-enable AI judging (needs `ANTHROPIC_API_KEY`) |
+| `--min-confidence <n>` | Minimum AI confidence to keep a finding (default 60) |
+| `--with-kb` | Attach KB precedents to each finding |
+| `--sarif` | Emit SARIF 2.1.0 (GitHub Code Scanning native) |
+| `--json` | Emit structured JSON |
+
 ## How It Works
 
 ```
-                        +-----------------+
-                        |   Claude Code   |
-                        |  (or CLI user)  |
-                        +--------+--------+
-                                 |
-                    +------------+------------+
-                    |                         |
-            +-------+-------+       +--------+--------+
-            |  Static Scan  |       |   KB Search /   |
-            |  (287 rules)  |       |   AI Analysis   |
-            |  offline/free |       |                 |
-            +-------+-------+       +--------+--------+
-                    |                         |
-                    v                         v
-            +---------------+       +-----------------+
-            | Regex engine  |       | Knowledge Base  |
-            | scans source  |       | 15,800+ findings |
-            | files locally |       | 920+ reports     |
-            +-------+-------+       | 85 firms        |
-                    |               +--------+--------+
-                    |                        |
-                    v                        v
-            +------------------------------------+
-            |     Results with KB context:       |
-            |  - Severity, CWE, category         |
-            |  - Real-world precedent            |
-            |  - Fix recommendations             |
-            +------------------------------------+
+   +-------------------+
+   |    Source code    |
+   +---------+---------+
+             |
+             v
+   +-------------------+      +-------------------+
+   |   Regex engine    +----->|   Triage layer    |
+   |  (287 rules)      |      | path & context    |
+   |  always runs      |      | always runs       |
+   +-------------------+      +---------+---------+
+                                        |
+                            optional    |
+   +-------------------+      +---------+---------+
+   |   Semgrep AST     +----->|                   |
+   | if CLI installed  |      |    AI triage      |
+   +-------------------+      |  (Claude Sonnet)  |
+                              |  if API key set   |
+                              +---------+---------+
+                                        |
+                                        v
+   +---------------------------------------------+
+   |      Findings + KB precedents               |
+   |   Severity, CWE, real-audit attribution     |
+   |   Output: text / JSON / SARIF               |
+   +---------------------------------------------+
 ```
 
-**Static scan** runs locally with zero network calls. Pattern-matched findings include severity, CWE, and a description derived from real audit reports.
+**Regex** scans every source file locally for OWASP-aligned vulnerability patterns. Each finding carries severity, CWE, category, and a snippet from real audits.
 
-**KB-augmented analysis** sends flagged code and relevant KB findings to Claude, which performs deeper analysis -- identifying false positives, finding logic bugs the regex cannot catch, and providing remediation advice grounded in how the same class of vulnerability was fixed in audited projects.
+**Triage** post-processes findings to drop false positives:
+
+- Config files like `google-services.json`, lockfiles, and `*.example` are dropped entirely
+- Findings inside test paths or inline `#[cfg(test)]` / `mod tests` blocks are downgraded
+- Per-rule context filters check for Axum extractors, `withSessionLock` wrappers, Android `LAUNCHER` activities, generic notification strings, and other shapes regex alone can't see
+
+**Semgrep** (optional) adds AST-based analysis from the Semgrep community ruleset (~2,000 rules). Runs only when `semgrep` is on the PATH; otherwise silently skipped.
+
+**AI triage** (optional) sends each finding -- with 30 lines of code context and the top 3 KB matches by category -- to Claude Sonnet. The model returns a confidence score (0-100), `isReal` verdict, and a one-line reason. Findings below the confidence threshold are filtered; the rest get severity recalibrated based on confidence.
+
+**KB precedents** attach real-world audit findings to each result: `Cure53 -> Silencelabs: hardcoded creds [CWE-798]`. This grounds every finding in actual prior incidents.
+
+**Output formats** include human-readable text (default), structured JSON, and SARIF 2.1.0 for GitHub Code Scanning.
 
 ## Knowledge Base
 
@@ -229,7 +292,9 @@ Contributions are welcome. Areas where help is especially useful:
 
 - **New detection rules** -- add rules to `src/rules.ts` with tests
 - **Audit report sources** -- add URLs to `src/sources.ts`
-- **False positive tuning** -- report false positives with the code that triggered them
+- **False positive tuning** -- add filters to `src/triage.ts` and a regression test in `src/__tests__/triage.test.ts`
+- **Per-rule context checks** -- extend `RULE_FILTERS` in `src/triage.ts` to teach the scanner about idiomatic patterns it currently flags by mistake
+- **Output formats** -- additional report formats can live alongside `formatText` / `formatJSON` / `formatSARIF` in `src/report.ts`
 - **Language support** -- extend file patterns and regex for additional languages
 
 Please open an issue before submitting large changes.
